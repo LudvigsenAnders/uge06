@@ -1,0 +1,31 @@
+# Author: Anders Ludvigsen
+# Decision for the configuration: The configuration is based on the the experience of the author, in an effort to
+#  enforce a consistent code style and quality across the project.
+
+[flake8]
+exclude = .git, __pycache__, venv*, .venv*, local_*, .pdm_build, dist
+max-complexity = 5
+max-line-length = 120
+per-file-ignores = ./tests/**:D103,D100,ANN201
+
+ignore = ANN101, ANN204, D105, DCO030
+
+# ANN101 (flake8-annotations): Missing type annotation for self in method
+# Cause for ignore: Type checker will infer the type of self, making the annotation redundant.
+
+# ANN204 (flake8-annotations):  Missing return type annotation for special method
+# Cause for ignore: Type checker will infer the return type of special methods like __init__, __str__, etc., making
+#   the annotation redundant.
+
+# D105: Missing docstring in magic method
+# Cause for ignore:  Magic methods are well explained in the python documentation and can thereafter be easily
+#   understood by the reader. Therefore adding docstrings to magic methods is redundant.
+
+# DCO030 (flake8-docstrings-complete): Function/method with return statement must have a return section in the docstring
+# Cause for ignore: Redundant to have a return section in the docstring when the return type is already annotated.
+
+# flakes8-import-order
+import-order-style = pycharm
+
+# flake8-bugbear
+extend-immutable-calls = Path
