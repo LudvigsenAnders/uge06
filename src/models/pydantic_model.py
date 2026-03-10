@@ -9,7 +9,7 @@ class Geometry(BaseModel):
 
 
 class ObservationProperties(BaseModel):
-    parameterId: str | list[str]         # e.g. "temp_dry"
+    parameterId: str         # e.g. "temp_dry"
     created: str             # e.g. 2025-08-11T12:18:11.451095Z
     value: float             # numeric measurement
     observed: str            # 2018-02-12T00:00:00Z

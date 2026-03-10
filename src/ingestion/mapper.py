@@ -57,7 +57,7 @@ def observation_from_feature(feature):
     return Observation(
         api_id=feature.id,
         station_id=p.stationId,
-        parameter_id=to_list(p.parameterId)[0],
+        parameter_id=p.parameterId,
         value=p.value,
         observed=parse_dt(p.observed),
         created=parse_dt(p.created),
