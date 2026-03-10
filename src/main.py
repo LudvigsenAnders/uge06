@@ -5,19 +5,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pandera.pandas as pa
 import json
-from models.pydantic import FeatureCollection, StationProperties, ObservationProperties
+from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties
+from ingestion.data_request import request_data
+from ingestion.mapper import station_from_feature, observation_from_feature
+from db.connection import get_session
 
 
-async def request_data(client, url, parameters):
-    try:
-        response = await client.get(url, params=parameters)
-        response.raise_for_status()
-        return response.json()
-    except httpx.TimeoutException:
-        print("Request timed out!")
-    except httpx.HTTPStatusError as exc:
-        print(f"HTTP error {exc.response.status_code}: {exc}")
-    return None
 
 
 async def main():

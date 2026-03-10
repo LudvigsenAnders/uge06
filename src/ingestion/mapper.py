@@ -1,9 +1,10 @@
-
-from models.sqlalchemy.stations import Station
-from models.sqlalchemy.observations import Observation
+from models.sqlalchemy_models import Station, Observation
 
 
 def station_from_feature(feature):
+
+    print("imported mapper module")
+
     p = feature.properties
     lon, lat = feature.geometry.coordinates
 
@@ -35,6 +36,8 @@ def station_from_feature(feature):
 
 
 def observation_from_feature(feature):
+
+    print("imported mapper module")
     p = feature.properties
     lon, lat = feature.geometry.coordinates
 
