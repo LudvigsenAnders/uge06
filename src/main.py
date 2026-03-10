@@ -30,6 +30,7 @@ async def main():
         "offset": 0
     }
 
+    
     async with httpx.AsyncClient(timeout=30.0) as client:
         await ingest(client, station_url, station_parameters)
         await ingest(client, met_obs_url, met_obs_parameters)
