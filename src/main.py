@@ -5,69 +5,66 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pandera.pandas as pa
 import json
-from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties
-from ingestion.data_request import request_data
-from ingestion.mapper import station_from_feature, observation_from_feature
-from db.connection import get_session
-
-
+from ingestion.ingestor import ingest
+from db.connection import close_asyncpg_pool, get_session, close_engine, stream, stream_batches, inspect_pool
+from db.init_db import init_db
+from db.db_utils import QueryRunner
 
 
 async def main():
-    async with httpx.AsyncClient() as client:
-        station_url = "https://opendataapi.dmi.dk/v2/metObs/collections/station/items"
-        station_parameters = {
-            #"datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
-            #"stationId": "06072",
-            "limit": 2,
-            #"offset": 0,
-        }
+    await init_db()
 
-        met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
-        met_obs_parameters = {
-            "datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
-            "stationId": "06072",
-            "parameterId": "temp_dry",
-            "limit": 2,
-            "sortorder": "observed,DESC",
-            "offset": 0
-        }
+    station_url = "https://opendataapi.dmi.dk/v2/metObs/collections/station/items"
+    station_parameters = {
+        #"datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
+        #"stationId": "06072",
+        "limit": 2,
+        #"offset": 0,
+    }
 
+    met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
+    met_obs_parameters = {
+        "datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
+        "stationId": "06072",
+        "parameterId": "temp_dry",
+        "limit": 2,
+        "sortorder": "observed,DESC",
+        "offset": 0
+    }
 
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        await ingest(client, station_url, station_parameters)
+        print("Ingestion completed:")
 
+            # # Get one row
+            # one_row = await q.fetch_one(
+            #     "SELECT * FROM orderdetails"
+            # )
+            # print(f"One row: {one_row}", "\n")
 
+            # await inspect_pool(session)
 
-        data_station = await request_data(client, station_url, station_parameters)
-        fc = FeatureCollection.model_validate(data_station)
+            # query = (
+            #     "select * from orders where employeeid in (2,5,8) "
+            #     "and shipregion is not null and shipvia in (1,3) "
+            #     "order by employeeid ASC, shipvia ASC;"
+            # )
+            # # Get rows
+            # output = await q.fetch_all(
+            #     query,
+            #     as_mapping=True
+            # )
+            # print(f"Output: {output}", "\n")
+            # print(f"Number of rows: {len(output)}", "\n")
 
-        for f in fc.features:
-            if isinstance(f.properties, StationProperties):
-                print("Station:", f.properties.name)
-            else:
-                print("Observation:", f.properties.parameterId)
-        
-        
-        
-        
-        df_station = pd.json_normalize(data_station["features"])
+            # # Streaming examples
+            # async for row in stream("SELECT * FROM orderdetails LIMIT 10"):
+            #     print(row)
 
-        #print(f"Station Data: {data_station}")  
-        #print(df_station.info())
-        #print(df_station)
+            # async for batch in stream_batches("SELECT * FROM orderdetails", batch_size=1500):
+            #     batch_df = pd.DataFrame(batch)
+            #     print(batch_df.info())
 
-        data_met_obs = await request_data(client, met_obs_url, met_obs_parameters)
-        fc = FeatureCollection.model_validate(data_met_obs)
-        for f in fc.features:
-            if isinstance(f.properties, StationProperties):
-                print("Station:", f.properties.name)
-            else:
-                print("Observation:", f.properties.parameterId)
-
-        df_met_obs = pd.json_normalize(data_met_obs["features"])
-
-
-        #print(f"Met Observations Data: {data_met_obs}")
-        #print(df_met_obs.info())
-        #print(df_met_obs)
+            # await close_asyncpg_pool()
 
 asyncio.run(main())
