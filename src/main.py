@@ -1,14 +1,12 @@
 import httpx
 import asyncio
-import datetime
-import pandas as pd
-import matplotlib.pyplot as plt
-import pandera.pandas as pa
-import json
 from ingestion.ingestor import ingest
-from db.connection import close_asyncpg_pool, get_session, close_engine, stream, stream_batches, inspect_pool
 from db.init_db import init_db
-from db.db_utils import QueryRunner
+
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# import pandera.pandas as pa
+# import json
 
 
 async def main():

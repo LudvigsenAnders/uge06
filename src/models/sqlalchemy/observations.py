@@ -9,7 +9,12 @@ class Observation(Base):
     __tablename__ = "observations"
 
     __table_args__ = (
-        UniqueConstraint("station_id", "parameter_id", "observed", name="uq_observations_station_id_parameter_id_observed"),
+        UniqueConstraint(
+            "station_id",
+            "parameter_id",
+            "observed",
+            name="uq_observations_station_id_parameter_id_observed",
+        ),
     )
 
     id = Column(BigInteger, Identity(start=1), primary_key=True)
