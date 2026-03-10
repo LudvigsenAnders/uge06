@@ -2,6 +2,7 @@
 from models.sqlalchemy.stations import Station
 from models.sqlalchemy.observations import Observation
 
+
 def station_from_feature(feature):
     p = feature.properties
     lon, lat = feature.geometry.coordinates
