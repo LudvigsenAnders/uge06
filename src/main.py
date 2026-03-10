@@ -18,7 +18,7 @@ async def main():
     station_parameters = {
         #"datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
         #"stationId": "06072",
-        "limit": 2,
+        "limit": 10,
         #"offset": 0,
     }
 
@@ -27,35 +27,15 @@ async def main():
         "datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
         "stationId": "06072",
         "parameterId": "temp_dry",
-        "limit": 2,
+        "limit": 10,
         "sortorder": "observed,DESC",
         "offset": 0
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         await ingest(client, station_url, station_parameters)
+        await ingest(client, met_obs_url, met_obs_parameters)
         print("Ingestion completed:")
-
-            # # Get one row
-            # one_row = await q.fetch_one(
-            #     "SELECT * FROM orderdetails"
-            # )
-            # print(f"One row: {one_row}", "\n")
-
-            # await inspect_pool(session)
-
-            # query = (
-            #     "select * from orders where employeeid in (2,5,8) "
-            #     "and shipregion is not null and shipvia in (1,3) "
-            #     "order by employeeid ASC, shipvia ASC;"
-            # )
-            # # Get rows
-            # output = await q.fetch_all(
-            #     query,
-            #     as_mapping=True
-            # )
-            # print(f"Output: {output}", "\n")
-            # print(f"Number of rows: {len(output)}", "\n")
 
             # # Streaming examples
             # async for row in stream("SELECT * FROM orderdetails LIMIT 10"):

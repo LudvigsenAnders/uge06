@@ -4,40 +4,50 @@ from .mapper import station_from_feature, observation_from_feature
 from db.connection import get_session, close_engine, inspect_pool
 from db.db_utils import QueryRunner
 import httpx
+from ingestion.repository import save_stations, save_observations
 
 
 async def ingest(client: httpx.AsyncClient, url: str, parameters: dict):
     # Step 1: fetch JSON
     raw = await request_data(client, url, parameters)
     print("Raw data fetched:", raw)
+
     # Step 2: parse unified FeatureCollection
     data = FeatureCollection.model_validate(raw)
     print(f"Parsed {len(data.features)} features from the response.")
-    print(f"Feature IDs: {[f.id for f in data.features]}")
-    # Step 3: store objects
+
+    # Prepare lists for batch save
+    station_rows = []
+    observation_rows = []
+
+    for f in data.features:
+        props = f.properties
+
+        if isinstance(props, StationProperties):
+            station_rows.append(station_from_feature(f))
+
+        elif isinstance(props, ObservationProperties):
+            observation_rows.append(observation_from_feature(f))
+
+        else:
+            raise ValueError(f"Unknown feature properties type: {props}")
+
+    # Step 3: store objects (batched)
     async for session in get_session():
         q = QueryRunner(session)
         async with q.transaction():
-            # Get a single scalar
             now = await q.fetch_value("SELECT NOW()")
-            print(f"Now: {now}", "\n")
+            print(f"Now: {now}\n")
 
-            for f in data.features:
+            # Save stations (BATCHED UPSERT with ON CONFLICT DO UPDATE)
+            if station_rows:
+                print(f"Saving {len(station_rows)} stations...")
+                await save_stations(session, station_rows)
 
-                # Identify which "properties" type this feature has
-                props = f.properties
+            # Save observations (BATCHED INSERT with ON CONFLICT DO NOTHING)
+            if observation_rows:
+                print(f"Saving {len(observation_rows)} observations...")
+                await save_observations(session, observation_rows)
 
-                if isinstance(props, StationProperties):
-                    obj = station_from_feature(f)
-
-                elif isinstance(props, ObservationProperties):
-                    obj = observation_from_feature(f)
-
-                else:
-                    raise ValueError(f"Unknown feature properties type: {props}")
-                print(f"Storing object with ID {obj.id} in the database...")
-                session.add(obj)
-
-            await session.commit()
     await close_engine()
     await inspect_pool(session)

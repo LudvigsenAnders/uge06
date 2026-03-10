@@ -1,13 +1,20 @@
 
-from sqlalchemy import Column, String, Float, JSON, TIMESTAMP
+from sqlalchemy import Column, String, Float, JSON, TIMESTAMP, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy import BigInteger, Identity
 from .base import Base
 
 
 class Station(Base):
     __tablename__ = "stations"
 
-    id = Column(UUID, primary_key=True)
+    __table_args__ = (
+        UniqueConstraint("api_id", name="uq_stations_api_id"),
+    )
+
+    id = Column(BigInteger, Identity(start=1), primary_key=True)
+
+    api_id = Column(UUID)
     name = Column(String)
     owner = Column(String)
     country = Column(String)
