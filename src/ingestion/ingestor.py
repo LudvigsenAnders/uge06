@@ -196,8 +196,8 @@ async def _process_pages(
     return station_buf, obs_buf, total_features
 
 
-async def chech_for_features(page, n_features):
-    
+async def _chech_for_features(page, n_features):
+
     if n_features == 0:
         logger.info("[INFO] No features returned for checkpoint URL -> end-of-stream. Clearing checkpoint and stopping.")
         await clear_checkpoint()
@@ -243,7 +243,7 @@ async def ingest_streaming(
         return
 
     stations, observations, n_features = transform([page])
-    await chech_for_features(page, n_features)
+    await _chech_for_features(page, n_features)
     
     logger.info(f"length of station: {len(stations)} and length of obs: {len(observations)} amd n_feat: {n_features}" )
       
