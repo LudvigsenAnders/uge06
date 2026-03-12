@@ -212,7 +212,6 @@ async def _chech_for_features(page, n_features):
         return
 
 
-
 async def ingest_streaming(
     client: httpx.AsyncClient,
     start_url: str,
@@ -247,7 +246,7 @@ async def ingest_streaming(
     await _chech_for_features(page, n_features)
 
     logger.info(f"length of station: {len(stations)} and length of obs: {len(observations)} amd n_feat: {n_features}" )
-  
+
     station_buf.extend(stations)
     obs_buf.extend(observations)
     total_features += n_features
@@ -265,7 +264,6 @@ async def ingest_streaming(
         logger.info(f"Final flush: {len(station_buf)} stations & {len(obs_buf)} observations.")
         await load_into_database(station_buf, obs_buf)    
         await clear_checkpoint()
-        #await _save_checkpoint_to_database(page)
 
     logger.info(f"Streaming ingest completed. Total features processed: {total_features}")
     print("#########################################\n")
