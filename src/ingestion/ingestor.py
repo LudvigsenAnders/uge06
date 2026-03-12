@@ -1,11 +1,11 @@
 from ingestion import data_request
 from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties
 from .mapper import station_from_feature, observation_from_feature
-from db.connection import get_session, close_engine, inspect_pool
+from db.connection import get_session  # , close_engine, inspect_pool
 from db.db_utils import QueryRunner
 import httpx
 from ingestion.repository import save_stations, save_observations
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Tuple
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from helper_functions.helper_functions import save_checkpoint, load_checkpoint, clear_checkpoint
 
@@ -68,7 +68,7 @@ async def load_into_database(station_rows: List, observation_rows: List):
                 logger.info(f"Saving {len(observation_rows)} observations.")
                 await save_observations(session, observation_rows)
 
-    #await close_engine()
+    # await close_engine()
 
 
 def _canonicalize_url(url: str) -> str:
@@ -200,7 +200,10 @@ async def _process_pages(
 async def _chech_for_features(page, n_features):
 
     if n_features == 0:
-        logger.info("[INFO] No features returned for checkpoint URL -> end-of-stream. Clearing checkpoint and stopping.")
+        logger.info(
+            "[INFO] No features returned for checkpoint URL -> "
+            "end-of-stream. Clearing checkpoint and stopping."
+        )
         await clear_checkpoint()
         return
 
@@ -245,7 +248,7 @@ async def ingest_streaming(
     stations, observations, n_features = transform([page])
     await _chech_for_features(page, n_features)
 
-    logger.info(f"length of station: {len(stations)} and length of obs: {len(observations)} amd n_feat: {n_features}" )
+    logger.info(f"length of station: {len(stations)} and length of obs: {len(observations)} amd n_feat: {n_features}")
 
     station_buf.extend(stations)
     obs_buf.extend(observations)
