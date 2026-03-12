@@ -1,10 +1,22 @@
 import httpx
 import asyncio
 from typing import Optional
-from collections.abc import AsyncIterator
+# from collections.abc import AsyncIterator
 import logging
 
 logger = logging.getLogger("data_request")
+
+
+async def _make_request(client: httpx.AsyncClient, url: str, params: dict | None) -> httpx.Response:
+    """Make HTTP GET request with proper parameter handling."""
+    if params is None:
+        # URL already contains everything (resume or next page)
+        logger.debug("HTTP GET raw URL: %s", url)
+        return await client.get(url)
+    else:
+        # Building a request using base URL + parameters
+        logger.debug("HTTP GET with params: url=%s params=%s", url, params)
+        return await client.get(url, params=params)
 
 
 async def request_data(client: httpx.AsyncClient, url: str, params: dict | None):
@@ -14,17 +26,8 @@ async def request_data(client: httpx.AsyncClient, url: str, params: dict | None)
     - If building URL for the first time → use params dict
     - Returns parsed JSON or None on failure
     """
-
     try:
-        if params is None:
-            # URL already contains everything (resume or next page)
-            logger.debug("HTTP GET raw URL: %s", url)
-            response = await client.get(url)
-        else:
-            # Building a request using base URL + parameters
-            logger.debug("HTTP GET with params: url=%s params=%s", url, params)
-            response = await client.get(url, params=params)
-
+        response = await _make_request(client, url, params)
         response.raise_for_status()
         return response.json()
 
@@ -45,10 +48,10 @@ async def request_data(client: httpx.AsyncClient, url: str, params: dict | None)
     return None
 
 
-async def _fetch_one(client: httpx.AsyncClient, url: str, params: dict, max_concurrency: int) -> Optional[dict]:
-    sem = asyncio.Semaphore(max_concurrency)
-    async with sem:
-        return await request_data(client, url, params)
+# async def _fetch_one(client: httpx.AsyncClient, url: str, params: dict, max_concurrency: int) -> Optional[dict]:
+#     sem = asyncio.Semaphore(max_concurrency)
+#     async with sem:
+#         return await request_data(client, url, params)
 
 
 def extract_next_link(payload: dict) -> Optional[str]:
@@ -79,43 +82,41 @@ async def retry_async(fn, *args, retries=5, delay=1, **kwargs):
             await asyncio.sleep(delay * attempt)
 
 
+# async def stream_pages(client: httpx.AsyncClient, start_url: str, base_params: dict) -> AsyncIterator[dict]:
+#     """Yield pages one by one, following 'next' links, fetching each page exactly once."""
+#     # -------------------------
+#     # Buffers for batched writes
+#     # -------------------------
+#     station_buf: list = []
+#     obs_buf: list = []
+#     total_features: int = 0
+
+#     # -------------------------
+#     # Streaming fetch loop
+#     # -------------------------
+#     next_url = start_url
+#     params = base_params
+#     visited = set()
+
+#     # First page
+#     page = await request_data(client, start_url, base_params)
+#     if not page:
+#         return
+#     yield page
+#     visited.add(start_url)
 
 
-async def stream_pages(client: httpx.AsyncClient, start_url: str, base_params: dict) -> AsyncIterator[dict]:
-    """Yield pages one by one, following 'next' links, fetching each page exactly once."""
-    # -------------------------
-    # Buffers for batched writes
-    # -------------------------
-    station_buf: list = []
-    obs_buf: list = []
-    total_features: int = 0
-
-    # -------------------------
-    # Streaming fetch loop
-    # -------------------------
-    next_url = start_url
-    params = base_params
-    visited = set()
-
-    # First page
-    page = await request_data(client, start_url, base_params)
-    if not page:
-        return
-    yield page
-    visited.add(start_url)
+#     # After first page, do not send params again
+#     params = {}
 
 
-    # After first page, do not send params again
-    params = {}
-
-
-    # Next pages
-    next_url = extract_next_link(page)
-    while next_url and next_url not in visited:
-        # You can still limit concurrency by firing the next N fetches ahead if desired
-        page = await request_data(client, next_url, params)
-        if not page:
-            break
-        yield page
-        visited.add(next_url)
-        next_url = extract_next_link(page)
+#     # Next pages
+#     next_url = extract_next_link(page)
+#     while next_url and next_url not in visited:
+#         # You can still limit concurrency by firing the next N fetches ahead if desired
+#         page = await request_data(client, next_url, params)
+#         if not page:
+#             break
+#         yield page
+#         visited.add(next_url)
+#         next_url = extract_next_link(page)
