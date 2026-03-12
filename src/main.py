@@ -31,7 +31,7 @@ async def main():
 
     met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
     met_obs_parameters = {
-        "datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
+        #"datetime": "2018-02-12T00:00:00Z/2018-02-13T00:00:00Z",
         "stationId": "06072",
         "parameterId": "temp_dry",
         #"limit": 10,
@@ -40,7 +40,7 @@ async def main():
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        #await ingest_streaming(client, station_url, station_parameters)
+        await ingest_streaming(client, station_url, station_parameters)
         await ingest_streaming(client, met_obs_url, met_obs_parameters)
         print("Ingestion completed:")
 

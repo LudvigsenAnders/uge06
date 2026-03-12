@@ -13,15 +13,15 @@ import logging
 logger = logging.getLogger("ingestion")
 
 
-def _process_feature(f, station_rows: List, observation_rows: List) -> None:
+def _process_feature(feature, station_rows: List, observation_rows: List) -> None:
     """Process a single feature and append to appropriate row list."""
-    props = f.properties
+    props = feature.properties
     if isinstance(props, StationProperties):
-        station_rows.append(station_from_feature(f))
+        station_rows.append(station_from_feature(feature))
     elif isinstance(props, ObservationProperties):
-        observation_rows.append(observation_from_feature(f))
+        observation_rows.append(observation_from_feature(feature))
     else:
-        logger.error(f"Unknown properties type in feature {f.id}: {type(props)}")
+        logger.error(f"Unknown properties type in feature {feature.id}: {type(props)}")
         raise ValueError(f"Unknown properties type: {type(props)}")
 
 
@@ -71,7 +71,7 @@ async def load_into_database(station_rows: List, observation_rows: List):
     #await close_engine()
 
 
-def canonicalize_url(url: str) -> str:
+def _canonicalize_url(url: str) -> str:
     """
     Normalize a URL for 'visited' tracking: scheme/host/path + sorted query.
     """
@@ -82,7 +82,7 @@ def canonicalize_url(url: str) -> str:
     return canonical
 
 
-def has_params_querystring(url: str) -> bool:
+def _has_params_querystring(url: str) -> bool:
     return bool(urlparse(url).query)
 
 
@@ -108,10 +108,10 @@ async def _fetch_first_page(
 
     url_with_params = (
         start_url
-        if has_params_querystring(start_url)
+        if _has_params_querystring(start_url)
         else f"{start_url}?{urlencode(sorted(base_params.items()))}"
     )
-    first_canon = canonicalize_url(url_with_params)
+    first_canon = _canonicalize_url(url_with_params)
     visited = {first_canon}
 
     return page, visited
@@ -126,13 +126,13 @@ async def _fetch_and_process_page(
     total_features: int,
     flush_every: int,
 ) -> Tuple[str, int]:
-    canon_next = canonicalize_url(next_url)
+    canon_next = _canonicalize_url(next_url)
 
     if canon_next in visited:
         logger.info(f"Already visited next_url={next_url}; stopping to avoid duplicate page.")
         return None, total_features
 
-    req_params = {} if not has_params_querystring(next_url) else None
+    req_params = {} if not _has_params_querystring(next_url) else None
 
     logger.info(f"Fetch next page: url={next_url} params={req_params}")
 
@@ -159,7 +159,7 @@ async def _fetch_and_process_page(
         logger.info(f"Flushing {len(station_buf)} stations & {len(obs_buf)} observations.")
         await load_into_database(station_buf, obs_buf)
 
-        await _save_checkpoint_to_database(next_url)
+        await _save_checkpoint_to_database(page)
 
         station_buf.clear()
         obs_buf.clear()
@@ -168,9 +168,10 @@ async def _fetch_and_process_page(
     return next_url, total_features
 
 
-async def _save_checkpoint_to_database(next_url: str):
+async def _save_checkpoint_to_database(page):
+    next_url = data_request.extract_next_link(page)
     if next_url:
-        await save_checkpoint(next_url)
+        await save_checkpoint(page)
         logger.debug(f"[DEBUG] Saved checkpoint after DB flush: {next_url}")
     else:
         await clear_checkpoint()
@@ -244,9 +245,9 @@ async def ingest_streaming(
 
     stations, observations, n_features = transform([page])
     await _chech_for_features(page, n_features)
-    
+
     logger.info(f"length of station: {len(stations)} and length of obs: {len(observations)} amd n_feat: {n_features}" )
-      
+  
     station_buf.extend(stations)
     obs_buf.extend(observations)
     total_features += n_features
@@ -262,9 +263,12 @@ async def ingest_streaming(
     # ---- FINAL FLUSH ----
     if station_buf or obs_buf:
         logger.info(f"Final flush: {len(station_buf)} stations & {len(obs_buf)} observations.")
-        await load_into_database(station_buf, obs_buf)
-
-        next_url = data_request.extract_next_link(page)
-        await _save_checkpoint_to_database(next_url)
+        await load_into_database(station_buf, obs_buf)    
+        await clear_checkpoint()
+        #await _save_checkpoint_to_database(page)
 
     logger.info(f"Streaming ingest completed. Total features processed: {total_features}")
+    print("#########################################\n")
+    print("#########################################\n")
+    print("#########################################\n")
+    print("#########################################\n")

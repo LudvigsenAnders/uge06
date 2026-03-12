@@ -12,4 +12,5 @@ class IngestCheckpoint(Base):
 
     id = Column(BigInteger, Identity(start=1), primary_key=True)
     next_url = Column(String)
+    table_name = Column(String)
     created = Column(TIMESTAMP(timezone=True))

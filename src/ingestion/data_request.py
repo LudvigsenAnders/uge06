@@ -45,28 +45,19 @@ async def request_data(client: httpx.AsyncClient, url: str, params: dict | None)
     return None
 
 
-
 async def _fetch_one(client: httpx.AsyncClient, url: str, params: dict, max_concurrency: int) -> Optional[dict]:
     sem = asyncio.Semaphore(max_concurrency)
     async with sem:
         return await request_data(client, url, params)
 
 
-# def extract_next_link(payload: dict) -> Optional[str]:
-#     """
-#     Extract 'next' link from a DMI FeatureCollection payload.
-#     Returns the next URL or None if not present.
-#     """
-#     links = payload.get("links", [])
-#     for link in links:
-#         if link.get("rel") == "next":
-#             return link.get("href")
-#     return None
-
-
-def extract_next_link(page: dict) -> Optional[str]:
+def extract_next_link(payload: dict) -> Optional[str]:
+    """
+    Extract 'next' link from a DMI FeatureCollection payload.
+    Returns the next URL or None if not present.
+    """
     try:
-        links = page.get("links", [])
+        links = payload.get("links", [])
         for link in links:
             if link.get("rel") == "next":
                 return link.get("href")
@@ -74,7 +65,6 @@ def extract_next_link(page: dict) -> Optional[str]:
         logger.warning(f"No next link {ex}")
         return None
     return None
-
 
 
 async def retry_async(fn, *args, retries=5, delay=1, **kwargs):

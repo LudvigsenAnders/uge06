@@ -1,8 +1,9 @@
 import logging
-
+import ingestion.data_request
 from sqlalchemy import text
 from db import connection
 from db.db_utils import QueryRunner
+from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties 
 
 
 
@@ -25,15 +26,17 @@ def setup_logging(enabled: bool = True):
     )
 
 
-async def save_checkpoint(url):
+async def save_checkpoint(page):
+    url = ingestion.data_request.extract_next_link(page)
+
     async for session in connection.get_session():
         q = QueryRunner(session)
         async with q.transaction():
             await session.execute(text(
                 """
                 INSERT INTO ingest_checkpoint (id, next_url, created)
-                VALUES (1, :url, NOW())
-                ON CONFLICT (id) DO UPDATE 
+                VALUES (1, :url ,NOW())
+                ON CONFLICT (id) DO UPDATE
                 SET next_url = :url"""),
                 {"url": url}
             )
