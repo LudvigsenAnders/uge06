@@ -220,7 +220,7 @@ async def ingest_streaming(
     start_url: str,
     base_params: dict,
     *,
-    flush_every: int = 2000, 
+    flush_every: int = 2000,
     verbose: bool = True,
 ):
     # try resume
@@ -265,7 +265,7 @@ async def ingest_streaming(
     # ---- FINAL FLUSH ----
     if station_buf or obs_buf:
         logger.info(f"Final flush: {len(station_buf)} stations & {len(obs_buf)} observations.")
-        await load_into_database(station_buf, obs_buf)    
+        await load_into_database(station_buf, obs_buf)
         await clear_checkpoint()
 
     logger.info(f"Streaming ingest completed. Total features processed: {total_features}")
