@@ -20,9 +20,9 @@ class Observation(Base):
     id = Column(BigInteger, Identity(start=1), primary_key=True)
 
     api_id = Column(UUID)
-    station_id = Column(String, index=True)
+    station_id = Column(String(255), index=True)
 
-    parameter_id = Column(String)
+    parameter_id = Column(String(255))
     value = Column(Float)
 
     observed = Column(TIMESTAMP(timezone=True))

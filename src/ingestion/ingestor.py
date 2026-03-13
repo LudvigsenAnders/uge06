@@ -1,10 +1,7 @@
-# ingestion/streaming.py
-
 from __future__ import annotations
 
-from typing import Optional, List, Tuple, Set, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple, Set, Protocol
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
-
 import logging
 import httpx
 
@@ -14,16 +11,34 @@ from .mapper import station_from_feature, observation_from_feature
 from db.connection import get_session
 from db.db_utils import QueryRunner
 from ingestion.repository import save_stations, save_observations
-from helper_functions.helper_functions import save_checkpoint, load_checkpoint, clear_checkpoint
 
 logger = logging.getLogger("ingestion")
 
 
+# ---- Protocols / Interfaces for DI -----------------------------------------
+
+class CheckpointStore(Protocol):
+    async def load(self) -> Optional[str]:
+        pass
+
+    async def save(self, next_url: str) -> None:
+        pass
+
+    async def clear(self) -> None:
+        pass
+
+
+class SessionFactory(Protocol):
+    def __aiter__(self):
+        pass
+
+    async def __anext__(self):
+        pass
+
+# ---- Helpers ----------------------------------------------------------------
+
+
 def _canonicalize_url(url: str) -> str:
-    """
-    Normalize a URL for 'visited' tracking: scheme/host/path + sorted query.
-    NOTE: keeps blank query values.
-    """
     parts = urlparse(url)
     query_pairs = parse_qsl(parts.query, keep_blank_values=True)
     query_sorted = urlencode(sorted(query_pairs))
@@ -31,10 +46,6 @@ def _canonicalize_url(url: str) -> str:
 
 
 def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
-    """
-    Build a URL with sorted query parameters.
-    If params is None, return the URL as-is.
-    """
     if not params:
         return url
     query_sorted = urlencode(sorted(params.items()))
@@ -42,240 +53,189 @@ def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
     return urlunparse((parts.scheme, parts.netloc, parts.path, '', query_sorted, ''))
 
 
-def _has_querystring(url: str) -> bool:
-    return bool(urlparse(url).query)
+def transform_page(raw: dict) -> Tuple[List, List, int]:
+    """Pure: parse a single FeatureCollection + map to ORM rows."""
+    try:
+        fc = FeatureCollection.model_validate(raw)
+    except Exception as ex:
+        logger.warning("Invalid page: %s", ex)
+        return [], [], 0
+
+    stations: List = []
+    observations: List = []
+    for f in fc.features:
+        props = f.properties
+        if isinstance(props, StationProperties):
+            stations.append(station_from_feature(f))
+        elif isinstance(props, ObservationProperties):
+            observations.append(observation_from_feature(f))
+        else:
+            logger.warning("Unknown properties type in feature %s: %s", getattr(f, "id", "?"), type(props))
+
+    return stations, observations, len(fc.features)
 
 
-def _append_feature_to_list(feature, station_rows: List, observation_rows: List) -> None:
+# ---- Orchestrator -----------------------------------------------------------
+
+class StreamingIngestor:
     """
-    Checks a single feature with either StationProperties or ObservationProperties
-    and append to appropriate row list.
+    Orchestrates paginated streaming ingestion:
+      - Fetch pages with retry
+      - Transform to ORM rows
+      - Buffer & flush into DB
+      - Save/clear checkpoints
+      - Avoid duplicate page fetches (visited set)
+
+    Dependencies are injected for testability.
     """
-    props = feature.properties
-    if isinstance(props, StationProperties):
-        station_rows.append(station_from_feature(feature))
-    elif isinstance(props, ObservationProperties):
-        observation_rows.append(observation_from_feature(feature))
-    else:
-        # Prefer resilience in ingestion pipelines
-        logger.warning("Unknown properties type in feature %s: %s", getattr(feature, "id", "?"), type(props))
 
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        session_factory: SessionFactory = get_session,
+        checkpoint: Optional[CheckpointStore] = None,
+        *,
+        flush_every: int = 2000,
+        logger_: Optional[logging.Logger] = None,
+    ) -> None:
+        self.client = client
+        self.session_factory = session_factory
+        self.checkpoint = checkpoint
+        self.flush_every = flush_every
+        self.logger = logger_ or logger
 
-def transform(pages: List[dict]) -> Tuple[List, List, int]:
-    """Parse DMI FeatureCollection + map to ORM rows."""
-    station_rows: List = []
-    observation_rows: List = []
-    total: int = 0
+        # internal state
+        self._visited: Set[str] = set()
+        self._station_buf: List = []
+        self._obs_buf: List = []
+        self._total_features: int = 0
 
-    for idx, raw in enumerate(pages, start=1):
-        try:
-            fc = FeatureCollection.model_validate(raw)
-        except Exception as ex:
-            logger.warning("Invalid page #%s: %s", idx, ex)
-            continue
+    # ---- Public API ----
 
-        total += len(fc.features)
+    async def run(self, start_url: str, base_params: Dict[str, Any]) -> int:
+        """
+        Returns total features processed.
+        """
+        url, params = await self._get_url_for_first_page(start_url, base_params)
+        self.logger.info("Streaming ingest starting for %s", start_url)
 
-        for f in fc.features:
-            _append_feature_to_list(f, station_rows, observation_rows)
+        # First page
+        page = await self._fetch_page(_build_url_with_params(url, params))
+        if not page:
+            return 0
 
-    logger.info(
-        "Parsed %s features. Stations: %s, Observations: %s",
-        total, len(station_rows), len(observation_rows)
-    )
+        st, obs, n = transform_page(page)
+        if not await self._should_continue(page, n):
+            return 0
 
-    return station_rows, observation_rows, total
+        self._extend_buffers(st, obs, n)
+        next_url = data_request.extract_next_link(page)
+        self.logger.info("Next URL extracted from first page: %s", next_url)
 
+        # Subsequent pages
+        while next_url:
+            next_url = await self._fetch_transform_and_maybe_flush(next_url)
 
-async def load_into_database(station_rows: List, observation_rows: List):
-    """Write saved rows to DB (in a single transaction)."""
-    async for session in get_session():
-        q = QueryRunner(session)
-        async with q.transaction():
-            now = await q.fetch_value("SELECT NOW()")
-            logger.debug("DB NOW(): %s", now)
+        # Final flush
+        await self._final_flush()
+        self.logger.info("Streaming ingest completed. Total features processed: %s", self._total_features)
+        return self._total_features
 
-            if station_rows:
-                logger.info("Saving %s stations.", len(station_rows))
-                await save_stations(session, station_rows)
+    # ---- Internals ----
 
-            if observation_rows:
-                logger.info("Saving %s observations.", len(observation_rows))
-                await save_observations(session, observation_rows)
+    async def _get_url_for_first_page(
+        self,
+        start_url: str,
+        base_params: Dict[str, Any]
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        if self.checkpoint:
+            resume_url = await self.checkpoint.load()
+            if resume_url:
+                self.logger.info("Resuming ingestion from saved URL: %s", resume_url)
+                return resume_url, None
+        self.logger.info("No checkpoint found. Starting fresh ingestion from initial URL: %s", start_url)
+        return start_url, base_params
 
+    async def _fetch_page(self, url_with_params: str) -> Optional[dict]:
+        canon = _canonicalize_url(url_with_params)
+        if canon in self._visited:
+            self.logger.info("Already visited %s; skipping.", url_with_params)
+            return None
 
-async def _fetch_first_page(
-    client: httpx.AsyncClient,
-    url: str,
-    params: Optional[Dict[str, Any]],
-) -> Tuple[Optional[dict], Set[str]]:
-    """Fetch and process the first page of data."""
-    normalized_url = _build_url_with_params(url, params)
-    logger.debug("Fetch first page: url=%s", normalized_url)
-
-    page = await data_request.retry_async(
-        data_request.request_data,
-        client,
-        normalized_url,
-        None,            # params=None since normalized_url already contains query
-        retries=5,
-        delay=1
-    )
-    if not page:
-        logger.warning("No first page response; aborting.")
-        return None, set()
-
-    visited = {_canonicalize_url(normalized_url)}
-    return page, visited
-
-
-async def _save_checkpoint(next_url: Optional[str]) -> None:
-    if next_url:
-        await save_checkpoint(next_url)
-        logger.debug("Saved checkpoint after DB flush: %s", next_url)
-    else:
-        await clear_checkpoint()
-
-
-async def _fetch_and_process_page(
-    client: httpx.AsyncClient,
-    next_url: str,
-    visited: Set[str],
-    station_buf: List,
-    obs_buf: List,
-    total_features: int,
-    flush_every: int,
-) -> Tuple[Optional[str], int]:
-    canon_next = _canonicalize_url(next_url)
-
-    if canon_next in visited:
-        logger.info("Already visited next_url=%s; stopping to avoid duplicate page.", next_url)
-        return None, total_features
-
-    logger.info("Fetch next page: url=%s", next_url)
-    page = await data_request.retry_async(
-        data_request.request_data,
-        client,
-        next_url,
-        None,  # next links should include their own params
-        retries=5,
-        delay=1
-    )
-
-    if not page:
-        logger.warning("Failed to fetch page: %s", next_url)
-        return None, total_features
-
-    visited.add(canon_next)
-
-    stations, observations, n_features = transform([page])
-    station_buf.extend(stations)
-    obs_buf.extend(observations)
-    total_features += n_features
-
-    # Flush by combined size or if any exceeds threshold
-    if (len(station_buf) + len(obs_buf)) >= flush_every or \
-       len(station_buf) >= flush_every or len(obs_buf) >= flush_every:
-        logger.info("Flushing %s stations & %s observations.", len(station_buf), len(obs_buf))
-        await load_into_database(station_buf, obs_buf)
-        await _save_checkpoint(data_request.extract_next_link(page))
-        station_buf.clear()
-        obs_buf.clear()
-
-    return data_request.extract_next_link(page), total_features
-
-
-async def _process_pages(
-    client: httpx.AsyncClient,
-    next_url: Optional[str],
-    visited: Set[str],
-    flush_every: int,
-) -> Tuple[List, List, int]:
-    """Process subsequent pages with pagination."""
-    station_buf: List = []
-    obs_buf: List = []
-    total_features: int = 0
-
-    while next_url:
-        next_url, total_features = await _fetch_and_process_page(
-            client, next_url, visited, station_buf, obs_buf, total_features, flush_every
+        self.logger.debug("Fetching url=%s", url_with_params)
+        page = await data_request.retry_async(
+            data_request.request_data,
+            self.client,
+            url_with_params,
+            None,  # params none; url already normalized
+            retries=5,
+            delay=1
         )
+        if page:
+            self._visited.add(canon)
+        else:
+            self.logger.warning("Failed to fetch page: %s", url_with_params)
+        return page
 
-    return station_buf, obs_buf, total_features
+    async def _fetch_transform_and_maybe_flush(self, next_url: str) -> Optional[str]:
+        page = await self._fetch_page(next_url)
+        if not page:
+            return None
 
+        st, obs, n = transform_page(page)
+        self._extend_buffers(st, obs, n)
 
-async def _check_for_features(page: dict, n_features: int) -> bool:
-    """
-    Returns False if the stream should stop (no features and/or no next link), True otherwise.
-    Also manages checkpoint clearing when stream is exhausted.
-    """
-    if n_features == 0:
-        logger.info("No features returned for checkpoint URL -> end-of-stream. Clearing checkpoint and stopping.")
-        await clear_checkpoint()
-        return False
+        if self._should_flush():
+            await self._flush()
+            if self.checkpoint:
+                nxt = data_request.extract_next_link(page)
+                if nxt:
+                    await self.checkpoint.save(nxt)
 
-    next_url = data_request.extract_next_link(page)
-    if not next_url:
-        logger.info("No `next` link -> final page. Clearing checkpoint and stopping.")
-        await clear_checkpoint()
-        return False
+        return data_request.extract_next_link(page)
 
-    return True
+    def _extend_buffers(self, stations: List, observations: List, n_features: int) -> None:
+        self._station_buf.extend(stations)
+        self._obs_buf.extend(observations)
+        self._total_features += n_features
 
+    def _should_flush(self) -> bool:
+        total = len(self._station_buf) + len(self._obs_buf)
+        return total >= self.flush_every or \
+            len(self._station_buf) >= self.flush_every or \
+            len(self._obs_buf) >= self.flush_every
 
-async def _get_url_for_first_page(start_url: str, base_params: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
-    resume_url = await load_checkpoint()
-    if resume_url:
-        logger.info("Resuming ingestion from saved URL: %s", resume_url)
-        return resume_url, None   # next links include their params
-    logger.info("No checkpoint found. Starting fresh ingestion from initial URL: %s", start_url)
-    return start_url, base_params
+    async def _flush(self) -> None:
+        if not self._station_buf and not self._obs_buf:
+            return
+        self.logger.info("Flushing %s stations & %s observations.", len(self._station_buf), len(self._obs_buf))
+        async for session in self.session_factory():
+            q = QueryRunner(session)
+            async with q.transaction():
+                if self._station_buf:
+                    await save_stations(session, self._station_buf)
+                if self._obs_buf:
+                    await save_observations(session, self._obs_buf)
+        self._station_buf.clear()
+        self._obs_buf.clear()
 
+    async def _final_flush(self) -> None:
+        await self._flush()
+        if self.checkpoint:
+            await self.checkpoint.clear()
 
-async def ingest_streaming(
-    client: httpx.AsyncClient,
-    start_url: str,
-    base_params: Dict[str, Any],
-    *,
-    flush_every: int = 2000,
-) -> None:
+    async def _should_continue(self, page: dict, n_features: int) -> bool:
+        if n_features == 0:
+            self.logger.info("No features returned for checkpoint URL -> end-of-stream.")
+            if self.checkpoint:
+                await self.checkpoint.clear()
+            return False
 
-    url, params = await _get_url_for_first_page(start_url, base_params)
-    logger.info("Streaming ingest starting for %s", start_url)
+        next_url = data_request.extract_next_link(page)
+        if not next_url:
+            self.logger.info("No `next` link -> final page.")
+            if self.checkpoint:
+                await self.checkpoint.clear()
+            return False
 
-    station_buf: List = []
-    obs_buf: List = []
-    total_features: int = 0
-
-    # ---- FIRST PAGE ----
-    page, visited = await _fetch_first_page(client, url, params)
-    if not page:
-        return
-
-    stations, observations, n_features = transform([page])
-    if not await _check_for_features(page, n_features):
-        # Already cleared checkpoint inside _check_for_features
-        return
-
-    logger.info("Stations=%s, Observations=%s, n_features=%s", len(stations), len(observations), n_features)
-
-    station_buf.extend(stations)
-    obs_buf.extend(observations)
-    total_features += n_features
-
-    # ---- NEXT PAGES ----
-    next_url = data_request.extract_next_link(page)
-    logger.info("Next URL extracted from first page: %s", next_url)
-    next_station, next_obs, next_total = await _process_pages(client, next_url, visited, flush_every)
-
-    station_buf.extend(next_station)
-    obs_buf.extend(next_obs)
-    total_features += next_total
-
-    # ---- FINAL FLUSH ----
-    if station_buf or obs_buf:
-        logger.info("Final flush: %s stations & %s observations.", len(station_buf), len(obs_buf))
-        await load_into_database(station_buf, obs_buf)
-        await clear_checkpoint()
-
-    logger.info("Streaming ingest completed. Total features processed: %s", total_features)
+        return True

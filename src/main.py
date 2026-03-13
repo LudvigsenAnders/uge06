@@ -1,7 +1,7 @@
 from helper_functions.helper_functions import setup_logging
 import httpx
 import asyncio
-from ingestion.ingestor import ingest_streaming
+#rom ingestion.ingestor import ingest_streaming
 from db.init_db import init_db
 
 
@@ -13,6 +13,15 @@ from db.init_db import init_db
 
 LOGGING = True
 MAX_CONCURRENCY = 5
+
+
+# somewhere in your app
+import httpx
+from ingestion.ingestor import StreamingIngestor
+from ingestion.checkpoint_store import UrlCheckpointStore
+
+
+
 
 
 async def main():
@@ -39,9 +48,23 @@ async def main():
         "offset": 0
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        #await ingest_streaming(client, station_url, station_parameters)
-        await ingest_streaming(client, met_obs_url, met_obs_parameters)
-        print("Ingestion completed:")
+    # async with httpx.AsyncClient(timeout=30.0) as client:
+    #     await ingest_streaming(client, station_url, station_parameters)
+    #     #await ingest_streaming(client, met_obs_url, met_obs_parameters)
+    #     print("Ingestion completed:")
+
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        ingestor = StreamingIngestor(
+            client=client,
+            checkpoint=UrlCheckpointStore(),
+            flush_every=2000
+        )
+        total = await ingestor.run(
+            start_url=met_obs_url,
+            base_params=met_obs_parameters
+        )
+        print(f"Ingestion completed: {total} rows downloaded to database")
+
 
 asyncio.run(main())

@@ -15,23 +15,23 @@ class Station(Base):
     id = Column(BigInteger, Identity(start=1), primary_key=True)
 
     api_id = Column(UUID)
-    name = Column(String)
-    owner = Column(String)
-    country = Column(String)
+    name = Column(String(255))
+    owner = Column(String(255))
+    country = Column(String(255))
 
-    station_id = Column(String)
-    wmo_station_id = Column(String)
-    wmo_country_code = Column(String)
-    region_id = Column(String)
+    station_id = Column(String(255))
+    wmo_station_id = Column(String(255))
+    wmo_country_code = Column(String(255))
+    region_id = Column(String(255))
 
-    type = Column(String)
-    status = Column(String)
+    type = Column(String(255))
+    status = Column(String(255))
 
     station_height = Column(Float)
     barometer_height = Column(Float)
     anemometer_height = Column(Float)
 
-    parameter_ids = Column(ARRAY(String))
+    parameter_ids = Column(ARRAY(String(255)))
 
     operation_from = Column(TIMESTAMP(timezone=True))
     operation_to = Column(TIMESTAMP(timezone=True))
