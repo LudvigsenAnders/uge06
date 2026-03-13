@@ -24,6 +24,7 @@ from ingestion.checkpoint_store import UrlCheckpointStore
 
 
 
+
 async def main():
 
     setup_logging(LOGGING)
@@ -48,21 +49,29 @@ async def main():
         "offset": 0
     }
 
+    spac_url = "https://climate.spac.dk/api/records"
+    spac_parameters = {
+        
+        #"from": "2026-02-27T09:32:45Z",
+        "limit": "250",
+        #"Authorization": "Bearer"
+    }
+
     # async with httpx.AsyncClient(timeout=30.0) as client:
     #     await ingest_streaming(client, station_url, station_parameters)
     #     #await ingest_streaming(client, met_obs_url, met_obs_parameters)
     #     print("Ingestion completed:")
+    token = "4t4b6sUUR4sTMvVHX-GM2AoGKhe7YnNdQXKcO2XccCs"
 
-
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {token}"}) as client:
         ingestor = StreamingIngestor(
             client=client,
             checkpoint=UrlCheckpointStore(),
             flush_every=2000
         )
         total = await ingestor.run(
-            start_url=met_obs_url,
-            base_params=met_obs_parameters
+            start_url=spac_url,
+            base_params=spac_parameters
         )
         print(f"Ingestion completed: {total} rows downloaded to database")
 

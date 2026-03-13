@@ -1,6 +1,10 @@
-from pydantic import BaseModel
-from typing import List, Optional, Union
+from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional, Union, Literal
 from uuid import UUID
+
+from datetime import datetime
+from uuid import UUID
+
 
 
 class Geometry(BaseModel):
@@ -61,3 +65,82 @@ class FeatureCollection(BaseModel):
     timeStamp: str
     numberReturned: int
     links: List[Link]
+
+
+
+
+
+
+# ============================================================
+# Security
+# ============================================================
+
+
+class BearerAuth(BaseModel):
+    """Represents a UUID bearer token."""
+    token: UUID
+
+
+# ============================================================
+# Sensor reading models
+# ============================================================
+
+class BME280(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    temperature: float
+    pressure: float
+    humidity: float
+
+
+class DS18B20(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device_name: str  # = Field(min_length=12, max_length=12)
+    raw_reading: int
+
+
+# ============================================================
+# Wrappers (externally tagged union)
+# ============================================================
+
+class BME280Wrapper(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    BME280: BME280
+
+
+class DS18B20Wrapper(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    DS18B20: DS18B20
+
+
+# ------------------------------------------------------------
+# Externally tagged union: exactly one of {BME280: {...}} or {DS18B20: {...}}
+# ------------------------------------------------------------
+
+Reading = Union[BME280Wrapper, DS18B20Wrapper]
+
+
+# ============================================================
+# Record
+# ============================================================
+
+class Record(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    timestamp: str
+    reading: Reading
+
+
+# ============================================================
+# Response Models
+# ============================================================
+
+class RecordResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    record: Record
+
+
+class RecordsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    records: List[Record]
+

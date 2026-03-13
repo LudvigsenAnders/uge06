@@ -1,7 +1,11 @@
 from models.sqlalchemy.stations import Station
 from models.sqlalchemy.observations import Observation
+from models.sqlalchemy.ballerup import BME280Reading, DS18B20Reading
 from datetime import datetime
 from typing import Optional
+
+from uuid import UUID
+from datetime import datetime
 
 
 def parse_dt(value: Optional[str]) -> Optional[datetime]:
@@ -65,3 +69,47 @@ def observation_from_feature(feature):
         latitude=lat,
         raw_json=feature.model_dump(mode="json")
     )
+
+
+
+
+def record_to_observation_orm(rec: Record) -> Record:
+    """
+    Convert a Pydantic Record into the SQLAlchemy ORM RecordORM +
+    child reading row (BME280 or DS18B20).
+    """
+
+    # Determine the reading type
+    if hasattr(rec.reading, "BME280"):
+        reading_type = "BME280"
+        p = rec.reading.BME280
+
+        orm = Record(
+            id=str(rec.id),
+            timestamp=parse_dt(rec.timestamp),
+            reading_type="BME280",
+            bme280=BME280Reading(
+                temperature=p.temperature,
+                pressure=p.pressure,
+                humidity=p.humidity,
+            )
+        )
+        return orm
+
+    elif hasattr(rec.reading, "DS18B20"):
+        reading_type = "DS18B20"
+        p = rec.reading.DS18B20
+
+        orm = Record(
+            id=str(rec.id),
+            timestamp=parse_dt(rec.timestamp),
+            reading_type="DS18B20",
+            ds18b20=DS18B20Reading(
+                device_name=p.device_name,
+                raw_reading=p.raw_reading,
+            )
+        )
+        return orm
+
+    else:
+        raise ValueError(f"Unknown Reading type in record: {type(rec.reading)}")

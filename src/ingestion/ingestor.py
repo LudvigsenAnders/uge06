@@ -6,8 +6,8 @@ import logging
 import httpx
 
 from ingestion import data_request
-from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties
-from .mapper import station_from_feature, observation_from_feature
+from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties, RecordsResponse, Record
+from .mapper import station_from_feature, observation_from_feature, record_to_observation_orm
 from db.connection import get_session
 from db.db_utils import QueryRunner
 from ingestion.repository import save_stations, save_observations
@@ -54,29 +54,57 @@ def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
 
 
 def transform_page(raw: dict) -> Tuple[List, List, int]:
-    """Pure: parse a single FeatureCollection + map to ORM rows."""
-    try:
-        fc = FeatureCollection.model_validate(raw)
-    except Exception as ex:
-        logger.warning("Invalid page: %s", ex)
-        return [], [], 0
+    
+    """
+    Parse a FeatureCollection **or** a RecordsResponse and map to ORM rows.
+    Returns (stations, observations, count).
+    """
 
-    stations: List = []
-    observations: List = []
-    for f in fc.features:
-        props = f.properties
-        if isinstance(props, StationProperties):
-            stations.append(station_from_feature(f))
-        elif isinstance(props, ObservationProperties):
-            observations.append(observation_from_feature(f))
-        else:
-            logger.warning("Unknown properties type in feature %s: %s", getattr(f, "id", "?"), type(props))
+    
+    # --- Case 1: Specialisterne API (RecordsResponse) ---
+    if "records" in raw:
+        try:
+            rr = RecordsResponse.model_validate(raw)
+        except Exception as ex:
+            logger.warning("Invalid RecordsResponse: %s", ex)
+            return [], [], 0
 
-    return stations, observations, len(fc.features)
+        # Convert each Record to ORM rows
+        # You need your own mapping functions here
+        observations = [record_to_observation_orm(rec) for rec in rr.records]
+        
+        return [], observations, len(rr.records)
+
+
+
+    # --- Case 2: FeatureCollection (GeoJSON) ---
+    if raw.get("type") == "FeatureCollection":
+
+        try:
+            fc = FeatureCollection.model_validate(raw)
+        except Exception as ex:
+            logger.warning("Invalid page: %s", ex)
+            return [], [], 0
+
+        stations: List = []
+        observations: List = []
+        for f in fc.features:
+            props = f.properties
+            if isinstance(props, StationProperties):
+                stations.append(station_from_feature(f))
+            elif isinstance(props, ObservationProperties):
+                observations.append(observation_from_feature(f))
+            else:
+                logger.warning("Unknown properties type in feature %s: %s", getattr(f, "id", "?"), type(props))
+
+        return stations, observations, len(fc.features)
+        
+    # --- Unknown payload ---
+    logger.warning("Unknown payload type: top-level keys=%s", list(raw.keys()))
+    return [], [], 0
 
 
 # ---- Orchestrator -----------------------------------------------------------
-
 class StreamingIngestor:
     """
     Orchestrates paginated streaming ingestion:

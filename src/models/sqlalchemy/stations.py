@@ -1,7 +1,6 @@
 
-from sqlalchemy import Column, String, Float, JSON, TIMESTAMP, UniqueConstraint
+from sqlalchemy import Column, String, Float, JSON, TIMESTAMP, UniqueConstraint, BigInteger, Identity
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
-from sqlalchemy import BigInteger, Identity
 from .base import Base
 
 

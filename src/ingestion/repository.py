@@ -5,7 +5,8 @@ from typing import Iterable
 
 from models.sqlalchemy.observations import Observation
 from models.sqlalchemy.stations import Station
-
+from models.sqlalchemy.ballerup import BME280Reading
+from models.sqlalchemy.ballerup import DS18B20Reading
 
 # Adjust this to tune performance
 BATCH_SIZE = 500
@@ -148,6 +149,47 @@ async def save_stations(session: AsyncSession, station_rows: list[Station]):
         stmt = stmt.on_conflict_do_update(
             index_elements=["api_id"],  # Primary key
             set_=update_cols
+        )
+
+        await session.execute(stmt)
+
+    await session.commit()
+
+
+# -------------------------------------------------------------------
+# SAVE BME280 OBSERVATIONS (WITH BATCHING)
+# -------------------------------------------------------------------
+async def save_BME280_reading(session: AsyncSession, obs_rows: list[BME280Reading]):
+    """
+    Insert observations_ballerup into PostgreSQL using ON CONFLICT DO NOTHING
+    in batches to achieve high throughput.
+
+    Requires UNIQUE constraint:
+        UNIQUE (api_id)
+    """
+    if not obs_rows:
+        return
+
+    async for batch in _chunked(obs_rows, BATCH_SIZE):
+        # Convert ORM objects → plain dicts
+        values = [
+            {
+                "api_id": row.api_id,
+                "temperature": row.temperature,
+                "pressure": row.pressure,
+                "humidity": row.humidity,
+                "raw_json": row.raw_json,     # already JSON-safe
+            }
+            for row in batch
+        ]
+
+        stmt = (
+            insert(BME280Reading)
+            .values(values)
+            .on_conflict_do_nothing(
+                # Use your unique constraint
+                index_elements=["api_id"]
+            )
         )
 
         await session.execute(stmt)
