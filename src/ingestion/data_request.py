@@ -48,12 +48,6 @@ async def request_data(client: httpx.AsyncClient, url: str, params: dict | None)
     return None
 
 
-# async def _fetch_one(client: httpx.AsyncClient, url: str, params: dict, max_concurrency: int) -> Optional[dict]:
-#     sem = asyncio.Semaphore(max_concurrency)
-#     async with sem:
-#         return await request_data(client, url, params)
-
-
 def extract_next_link(payload: dict) -> Optional[str]:
     """
     Extract 'next' link from a DMI FeatureCollection payload.

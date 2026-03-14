@@ -6,8 +6,10 @@ import logging
 import httpx
 
 from ingestion import data_request
+from models.sqlalchemy_orm.observations import Observation
+from models.sqlalchemy_orm.stations import Station
 from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties, RecordsResponse, Record
-from .mapper import station_from_feature_to_orm, observation_from_feature_to_orm, observation_from_record_to_orm
+from .mapper import station_from_feature_to_orm, observation_from_feature_to_orm, observations_from_bme280_to_ORM, observations_from_DS18B20_to_ORM
 from db.connection import get_session
 from db.db_utils import QueryRunner
 from ingestion.repository import save_stations, save_observations
@@ -54,13 +56,11 @@ def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
 
 
 def transform_page(raw: dict) -> Tuple[List, List, int]:
-    
     """
     Parse a FeatureCollection **or** a RecordsResponse and map to ORM rows.
     Returns (stations, observations, count).
     """
 
-    
     # --- Case 1: Specialisterne API (RecordsResponse) ---
     if "records" in raw:
         try:
@@ -69,13 +69,16 @@ def transform_page(raw: dict) -> Tuple[List, List, int]:
             logger.warning("Invalid RecordsResponse: %s", ex)
             return [], [], 0
 
-        # Convert each Record to ORM rows
-        # You need your own mapping functions here
-        observations = [observation_from_record_to_orm(rec) for rec in rr.records]
-        
-        return [], observations, len(rr.records)
-
-
+        # Convert each Record to ORM Observation rows
+        obs_rows: list[Observation] = []
+        for rec in rr.records:
+            if hasattr(rec.reading, "BME280"):
+                obs_rows.extend(observations_from_bme280_to_ORM(rec))
+            elif hasattr(rec.reading, "DS18B20"):
+                obs_rows.append(observations_from_DS18B20_to_ORM(rec))
+            else:
+                logger.warning("Unknown reading type: %s", type(rec.reading))
+        return [], obs_rows, len(obs_rows)
 
     # --- Case 2: FeatureCollection (GeoJSON) ---
     if raw.get("type") == "FeatureCollection":
@@ -86,8 +89,8 @@ def transform_page(raw: dict) -> Tuple[List, List, int]:
             logger.warning("Invalid page: %s", ex)
             return [], [], 0
 
-        stations: List = []
-        observations: List = []
+        stations: list[Station] = []
+        observations: list[Observation] = []
         for f in fc.features:
             props = f.properties
             if isinstance(props, StationProperties):
@@ -149,6 +152,7 @@ class StreamingIngestor:
 
         # First page
         page = await self._fetch_page(_build_url_with_params(url, params))
+
         if not page:
             return 0
 
@@ -158,6 +162,10 @@ class StreamingIngestor:
 
         self._extend_buffers(st, obs, n)
         next_url = data_request.extract_next_link(page)
+
+        print("next_url: ", next_url)
+
+
         self.logger.info("Next URL extracted from first page: %s", next_url)
 
         # Subsequent pages
@@ -264,6 +272,6 @@ class StreamingIngestor:
             self.logger.info("No `next` link -> final page.")
             if self.checkpoint:
                 await self.checkpoint.clear()
-            return False
+            return True
 
         return True

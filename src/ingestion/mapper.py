@@ -1,6 +1,6 @@
 from models.sqlalchemy_orm.stations import Station
 from models.sqlalchemy_orm.observations import Observation
-from models.sqlalchemy_orm.ballerup import BME280ReadingORM, DS18B20ReadingORM, RecordORM
+from models.pydantic_model import Feature, Record
 from datetime import datetime
 from typing import Optional
 
@@ -18,7 +18,7 @@ def to_list(value):
     return [value]
 
 
-def station_from_feature_to_orm(feature):
+def station_from_feature_to_orm(feature: Feature) -> Station:
 
     p = feature.properties
     lon, lat = feature.geometry.coordinates
@@ -50,7 +50,7 @@ def station_from_feature_to_orm(feature):
     )
 
 
-def observation_from_feature_to_orm(feature):
+def observation_from_feature_to_orm(feature: Feature) -> Observation:
 
     p = feature.properties
     lon, lat = feature.geometry.coordinates
@@ -68,43 +68,35 @@ def observation_from_feature_to_orm(feature):
     )
 
 
-def observation_from_record_to_orm(rec: RecordORM) -> RecordORM:
-    """
-    Convert a Pydantic Record into the SQLAlchemy ORM RecordORM +
-    child reading row (BME280 or DS18B20).
-    """
+def observations_from_bme280_to_ORM(rec: Record) -> list[Observation]:
+    r = rec.reading.BME280
+    ts = rec.timestamp
+    base = dict(
+        api_id=str(rec.id),
+        station_id="ballerup-BME280",
+        observed=parse_dt(ts),
+        created=parse_dt(ts),
+        latitude=None,
+        longitude=None,
+        raw_json=rec.model_dump(mode="json"),
+    )
+    return [
+        Observation(parameter_id="temperature", value=r.temperature, **base),
+        Observation(parameter_id="pressure", value=r.pressure, **base),
+        Observation(parameter_id="humidity", value=r.humidity, **base),
+    ]
 
-    # Determine the reading type
-    if hasattr(rec.reading, "BME280"):
-        reading_type = "BME280"
-        p = rec.reading.BME280
 
-        orm = RecordORM(
-            id=str(rec.id),
-            timestamp=parse_dt(rec.timestamp),
-            reading_type="BME280",
-            bme280=BME280ReadingORM(
-                temperature=p.temperature,
-                pressure=p.pressure,
-                humidity=p.humidity,
-            )
-        )
-        return orm
-
-    elif hasattr(rec.reading, "DS18B20"):
-        reading_type = "DS18B20"
-        p = rec.reading.DS18B20
-
-        orm = RecordORM(
-            id=str(rec.id),
-            timestamp=parse_dt(rec.timestamp),
-            reading_type="DS18B20",
-            ds18b20=DS18B20ReadingORM(
-                device_name=p.device_name,
-                raw_reading=p.raw_reading,
-            )
-        )
-        return orm
-
-    else:
-        raise ValueError(f"Unknown Reading type in record: {type(rec.reading)}")
+def observations_from_DS18B20_to_ORM(rec: Record) -> list[Observation]:
+    r = rec.reading.DS18B20
+    ts = rec.timestamp
+    base = dict(
+        api_id=str(rec.id),
+        station_id="ballerup-DS18B20-" + r.device_name,
+        observed=parse_dt(ts),
+        created=parse_dt(ts),
+        latitude=None,
+        longitude=None,
+        raw_json=rec.model_dump(mode="json"),
+    )
+    return Observation(parameter_id="raw_reading", value=r.raw_reading, **base)

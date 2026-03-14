@@ -1,12 +1,11 @@
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Union, Literal
-from uuid import UUID
-
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict
+from typing import List, Optional, Union
 from uuid import UUID
 
 
-
+# ============================================================
+# Pydantic model for DMI data
+# ============================================================
 class Geometry(BaseModel):
     type: str
     coordinates: List[float]
@@ -67,15 +66,13 @@ class FeatureCollection(BaseModel):
     links: List[Link]
 
 
-
-
-
+# ============================================================
+# Pydantic model for Ballerup data
+# ============================================================
 
 # ============================================================
 # Security
 # ============================================================
-
-
 class BearerAuth(BaseModel):
     """Represents a UUID bearer token."""
     token: UUID
@@ -84,7 +81,6 @@ class BearerAuth(BaseModel):
 # ============================================================
 # Sensor reading models
 # ============================================================
-
 class BME280(BaseModel):
     model_config = ConfigDict(extra="forbid")
     temperature: float
@@ -101,7 +97,6 @@ class DS18B20(BaseModel):
 # ============================================================
 # Wrappers (externally tagged union)
 # ============================================================
-
 class BME280Wrapper(BaseModel):
     model_config = ConfigDict(extra="forbid")
     BME280: BME280
@@ -115,14 +110,12 @@ class DS18B20Wrapper(BaseModel):
 # ------------------------------------------------------------
 # Externally tagged union: exactly one of {BME280: {...}} or {DS18B20: {...}}
 # ------------------------------------------------------------
-
 Reading = Union[BME280Wrapper, DS18B20Wrapper]
 
 
 # ============================================================
 # Record
 # ============================================================
-
 class Record(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -134,7 +127,6 @@ class Record(BaseModel):
 # ============================================================
 # Response Models
 # ============================================================
-
 class RecordResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     record: Record
@@ -143,4 +135,3 @@ class RecordResponse(BaseModel):
 class RecordsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     records: List[Record]
-
