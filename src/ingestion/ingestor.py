@@ -7,7 +7,7 @@ import httpx
 
 from ingestion import data_request
 from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties, RecordsResponse, Record
-from .mapper import station_from_feature, observation_from_feature, record_to_observation_orm
+from .mapper import station_from_feature_to_orm, observation_from_feature_to_orm, observation_from_record_to_orm
 from db.connection import get_session
 from db.db_utils import QueryRunner
 from ingestion.repository import save_stations, save_observations
@@ -71,7 +71,7 @@ def transform_page(raw: dict) -> Tuple[List, List, int]:
 
         # Convert each Record to ORM rows
         # You need your own mapping functions here
-        observations = [record_to_observation_orm(rec) for rec in rr.records]
+        observations = [observation_from_record_to_orm(rec) for rec in rr.records]
         
         return [], observations, len(rr.records)
 
@@ -91,9 +91,9 @@ def transform_page(raw: dict) -> Tuple[List, List, int]:
         for f in fc.features:
             props = f.properties
             if isinstance(props, StationProperties):
-                stations.append(station_from_feature(f))
+                stations.append(station_from_feature_to_orm(f))
             elif isinstance(props, ObservationProperties):
-                observations.append(observation_from_feature(f))
+                observations.append(observation_from_feature_to_orm(f))
             else:
                 logger.warning("Unknown properties type in feature %s: %s", getattr(f, "id", "?"), type(props))
 

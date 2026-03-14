@@ -3,10 +3,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Iterable
 
-from models.sqlalchemy.observations import Observation
-from models.sqlalchemy.stations import Station
-from models.sqlalchemy.ballerup import BME280Reading
-from models.sqlalchemy.ballerup import DS18B20Reading
+from models.sqlalchemy_orm.observations import Observation
+from models.sqlalchemy_orm.stations import Station
+from models.sqlalchemy_orm.ballerup import BME280ReadingORM
+from models.sqlalchemy_orm.ballerup import DS18B20ReadingORM
 
 # Adjust this to tune performance
 BATCH_SIZE = 500
@@ -159,7 +159,7 @@ async def save_stations(session: AsyncSession, station_rows: list[Station]):
 # -------------------------------------------------------------------
 # SAVE BME280 OBSERVATIONS (WITH BATCHING)
 # -------------------------------------------------------------------
-async def save_BME280_reading(session: AsyncSession, obs_rows: list[BME280Reading]):
+async def save_BME280_reading(session: AsyncSession, obs_rows: list[BME280ReadingORM]):
     """
     Insert observations_ballerup into PostgreSQL using ON CONFLICT DO NOTHING
     in batches to achieve high throughput.
@@ -184,7 +184,7 @@ async def save_BME280_reading(session: AsyncSession, obs_rows: list[BME280Readin
         ]
 
         stmt = (
-            insert(BME280Reading)
+            insert(BME280ReadingORM)
             .values(values)
             .on_conflict_do_nothing(
                 # Use your unique constraint

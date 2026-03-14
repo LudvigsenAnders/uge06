@@ -1,11 +1,8 @@
-from models.sqlalchemy.stations import Station
-from models.sqlalchemy.observations import Observation
-from models.sqlalchemy.ballerup import BME280Reading, DS18B20Reading
+from models.sqlalchemy_orm.stations import Station
+from models.sqlalchemy_orm.observations import Observation
+from models.sqlalchemy_orm.ballerup import BME280ReadingORM, DS18B20ReadingORM, RecordORM
 from datetime import datetime
 from typing import Optional
-
-from uuid import UUID
-from datetime import datetime
 
 
 def parse_dt(value: Optional[str]) -> Optional[datetime]:
@@ -21,7 +18,7 @@ def to_list(value):
     return [value]
 
 
-def station_from_feature(feature):
+def station_from_feature_to_orm(feature):
 
     p = feature.properties
     lon, lat = feature.geometry.coordinates
@@ -53,7 +50,7 @@ def station_from_feature(feature):
     )
 
 
-def observation_from_feature(feature):
+def observation_from_feature_to_orm(feature):
 
     p = feature.properties
     lon, lat = feature.geometry.coordinates
@@ -71,9 +68,7 @@ def observation_from_feature(feature):
     )
 
 
-
-
-def record_to_observation_orm(rec: Record) -> Record:
+def observation_from_record_to_orm(rec: RecordORM) -> RecordORM:
     """
     Convert a Pydantic Record into the SQLAlchemy ORM RecordORM +
     child reading row (BME280 or DS18B20).
@@ -84,11 +79,11 @@ def record_to_observation_orm(rec: Record) -> Record:
         reading_type = "BME280"
         p = rec.reading.BME280
 
-        orm = Record(
+        orm = RecordORM(
             id=str(rec.id),
             timestamp=parse_dt(rec.timestamp),
             reading_type="BME280",
-            bme280=BME280Reading(
+            bme280=BME280ReadingORM(
                 temperature=p.temperature,
                 pressure=p.pressure,
                 humidity=p.humidity,
@@ -100,11 +95,11 @@ def record_to_observation_orm(rec: Record) -> Record:
         reading_type = "DS18B20"
         p = rec.reading.DS18B20
 
-        orm = Record(
+        orm = RecordORM(
             id=str(rec.id),
             timestamp=parse_dt(rec.timestamp),
             reading_type="DS18B20",
-            ds18b20=DS18B20Reading(
+            ds18b20=DS18B20ReadingORM(
                 device_name=p.device_name,
                 raw_reading=p.raw_reading,
             )

@@ -16,7 +16,6 @@ MAX_CONCURRENCY = 5
 
 
 # somewhere in your app
-import httpx
 from ingestion.ingestor import StreamingIngestor
 from ingestion.checkpoint_store import UrlCheckpointStore
 
@@ -51,7 +50,7 @@ async def main():
 
     spac_url = "https://climate.spac.dk/api/records"
     spac_parameters = {
-        
+
         #"from": "2026-02-27T09:32:45Z",
         "limit": "250",
         #"Authorization": "Bearer"
