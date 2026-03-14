@@ -52,14 +52,9 @@ async def main():
     spac_parameters = {
 
         #"from": "2026-02-27T09:32:45Z",
-        "limit": "250",
-        #"Authorization": "Bearer"
+        "limit": "250"
     }
 
-    # async with httpx.AsyncClient(timeout=30.0) as client:
-    #     await ingest_streaming(client, station_url, station_parameters)
-    #     #await ingest_streaming(client, met_obs_url, met_obs_parameters)
-    #     print("Ingestion completed:")
     token = "4t4b6sUUR4sTMvVHX-GM2AoGKhe7YnNdQXKcO2XccCs"
 
     async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {token}"}) as client:
@@ -69,8 +64,8 @@ async def main():
             flush_every=2000
         )
         total = await ingestor.run(
-            start_url=spac_url,
-            base_params=spac_parameters
+            start_url=station_url,
+            base_params=station_parameters
         )
         print(f"Ingestion completed: {total} rows downloaded to database")
 
