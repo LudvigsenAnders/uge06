@@ -10,6 +10,7 @@ import asyncpg
 load_dotenv()
 SQLALCHEMY_URL = os.getenv("SQLALCHEMY_URL")
 ASYNC_PG_URL = os.getenv("ASYNC_PG_URL")
+MY_TOKEN = os.getenv("MY_TOKEN")
 _pool: Optional[asyncpg.pool.Pool] = None
 print("[DB] Loading DB module...")
 

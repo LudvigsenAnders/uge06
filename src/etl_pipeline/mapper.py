@@ -92,7 +92,7 @@ def observations_from_DS18B20_to_ORM(rec: Record) -> list[Observation]:
     ts = rec.timestamp
     base = dict(
         api_id=str(rec.id),
-        station_id="ballerup-DS18B20-" + r.device_name,
+        station_id="ballerup-DS18B20-",
         observed=parse_dt(ts),
         created=parse_dt(ts),
         latitude=None,

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
 
-class IngestCheckpoint(Base):
+class URLCheckpoint(Base):
     __tablename__ = "ingest_checkpoint"
 
     __table_args__ = (

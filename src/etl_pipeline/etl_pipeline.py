@@ -4,15 +4,18 @@ from typing import Optional, Dict, Any, List, Tuple, Set, Protocol
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import logging
 import httpx
-
-from ingestion import data_request
+from etl_pipeline import data_request
 from models.sqlalchemy_orm.observations import Observation
 from models.sqlalchemy_orm.stations import Station
-from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties, RecordsResponse, Record
-from .mapper import station_from_feature_to_orm, observation_from_feature_to_orm, observations_from_bme280_to_ORM, observations_from_DS18B20_to_ORM
+from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties, RecordsResponse
+from .mapper import (station_from_feature_to_orm,
+                     observation_from_feature_to_orm,
+                     observations_from_bme280_to_ORM,
+                     observations_from_DS18B20_to_ORM
+                     )
 from db.connection import get_session
 from db.db_utils import QueryRunner
-from ingestion.repository import save_stations, save_observations
+from etl_pipeline.postgresql_repository import save_stations, save_observations
 
 logger = logging.getLogger("ingestion")
 
@@ -55,60 +58,74 @@ def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
     return urlunparse((parts.scheme, parts.netloc, parts.path, '', query_sorted, ''))
 
 
+def parse_spac_api(raw: dict) -> Tuple[List, List, int]:
+    '''
+    --- Specialisterne API (RecordsResponse) ---
+    '''
+    obs_rows: list[Observation] = []
+    try:
+        rr = RecordsResponse.model_validate(raw)
+    except Exception as ex:
+        logger.warning("Invalid RecordsResponse: %s", ex)
+        return [], [], 0
+
+    # Convert each Record to ORM Observation rows
+    for rec in rr.records:
+        if hasattr(rec.reading, "BME280"):
+            obs_rows.extend(observations_from_bme280_to_ORM(rec))
+        elif hasattr(rec.reading, "DS18B20"):
+            obs_rows.append(observations_from_DS18B20_to_ORM(rec))
+        else:
+            logger.warning("Unknown reading type: %s", type(rec.reading))
+    return [], obs_rows, len(obs_rows)
+
+
+def parse_dmi_api(raw: dict) -> Tuple[List, List, int]:
+    stations: list[Station] = []
+    observations: list[Observation] = []
+
+    try:
+        fc = FeatureCollection.model_validate(raw)
+    except Exception as ex:
+        logger.warning("Invalid page: %s", ex)
+        return [], [], 0
+
+    for f in fc.features:
+        props = f.properties
+        if isinstance(props, StationProperties):
+            stations.append(station_from_feature_to_orm(f))
+        elif isinstance(props, ObservationProperties):
+            observations.append(observation_from_feature_to_orm(f))
+        else:
+            logger.warning("Unknown properties type in feature %s: %s", getattr(f, "id", "?"), type(props))
+
+    return stations, observations, len(fc.features)
+
+
 def transform_page(raw: dict) -> Tuple[List, List, int]:
     """
     Parse a FeatureCollection **or** a RecordsResponse and map to ORM rows.
     Returns (stations, observations, count).
     """
+    stations: list[Station] = []
+    observations: list[Observation] = []
+    total: int = 0
 
     # --- Case 1: Specialisterne API (RecordsResponse) ---
     if "records" in raw:
-        try:
-            rr = RecordsResponse.model_validate(raw)
-        except Exception as ex:
-            logger.warning("Invalid RecordsResponse: %s", ex)
-            return [], [], 0
+        stations, observations, total = parse_spac_api(raw)
+        # --- Case 2: FeatureCollection (GeoJSON) ---
+    elif raw.get("type") == "FeatureCollection":
+        stations, observations, total = parse_dmi_api(raw)
+    else:
+        # --- Unknown payload ---
+        logger.warning("Unknown payload type: top-level keys=%s", list(raw.keys()))
 
-        # Convert each Record to ORM Observation rows
-        obs_rows: list[Observation] = []
-        for rec in rr.records:
-            if hasattr(rec.reading, "BME280"):
-                obs_rows.extend(observations_from_bme280_to_ORM(rec))
-            elif hasattr(rec.reading, "DS18B20"):
-                obs_rows.append(observations_from_DS18B20_to_ORM(rec))
-            else:
-                logger.warning("Unknown reading type: %s", type(rec.reading))
-        return [], obs_rows, len(obs_rows)
-
-    # --- Case 2: FeatureCollection (GeoJSON) ---
-    if raw.get("type") == "FeatureCollection":
-
-        try:
-            fc = FeatureCollection.model_validate(raw)
-        except Exception as ex:
-            logger.warning("Invalid page: %s", ex)
-            return [], [], 0
-
-        stations: list[Station] = []
-        observations: list[Observation] = []
-        for f in fc.features:
-            props = f.properties
-            if isinstance(props, StationProperties):
-                stations.append(station_from_feature_to_orm(f))
-            elif isinstance(props, ObservationProperties):
-                observations.append(observation_from_feature_to_orm(f))
-            else:
-                logger.warning("Unknown properties type in feature %s: %s", getattr(f, "id", "?"), type(props))
-
-        return stations, observations, len(fc.features)
-        
-    # --- Unknown payload ---
-    logger.warning("Unknown payload type: top-level keys=%s", list(raw.keys()))
-    return [], [], 0
+    return stations, observations, total
 
 
 # ---- Orchestrator -----------------------------------------------------------
-class StreamingIngestor:
+class ETLPipeline:
     """
     Orchestrates paginated streaming ingestion:
       - Fetch pages with retry

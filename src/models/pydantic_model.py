@@ -7,11 +7,13 @@ from uuid import UUID
 # Pydantic model for DMI data
 # ============================================================
 class Geometry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     type: str
     coordinates: List[float]
 
 
 class ObservationProperties(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     parameterId: str        # e.g. "temp_dry"
     created: str             # e.g. 2025-08-11T12:18:11.451095Z
     value: float             # numeric measurement
@@ -20,6 +22,7 @@ class ObservationProperties(BaseModel):
 
 
 class StationProperties(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     owner: Optional[str] = None
     country: Optional[str] = None
     anemometerHeight: Optional[float] = None
@@ -45,6 +48,7 @@ PropertiesUnion = Union[ObservationProperties, StationProperties]
 
 
 class Feature(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     type: str
     id: UUID
     geometry: Geometry
@@ -52,6 +56,7 @@ class Feature(BaseModel):
 
 
 class Link(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     href: str
     rel: str
     type: Optional[str] = None
@@ -59,6 +64,7 @@ class Link(BaseModel):
 
 
 class FeatureCollection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     type: str
     features: List[Feature]
     timeStamp: str

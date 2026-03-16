@@ -1,27 +1,13 @@
 from helper_functions.helper_functions import setup_logging
 import httpx
 import asyncio
-#rom ingestion.ingestor import ingest_streaming
+from db.connection import MY_TOKEN
 from db.init_db import init_db
-
-
-# import pandas as pd
-# import matplotlib.pyplot as plt
-# import pandera.pandas as pa
-# import json
-
+from etl_pipeline.etl_pipeline import ETLPipeline
+from etl_pipeline.checkpoint_store import UrlCheckpointStore
 
 LOGGING = True
 MAX_CONCURRENCY = 5
-
-
-# somewhere in your app
-from ingestion.ingestor import StreamingIngestor
-from ingestion.checkpoint_store import UrlCheckpointStore
-
-
-
-
 
 
 async def main():
@@ -55,17 +41,17 @@ async def main():
         "limit": "250"
     }
 
-    token = "4t4b6sUUR4sTMvVHX-GM2AoGKhe7YnNdQXKcO2XccCs"
 
-    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {token}"}) as client:
-        ingestor = StreamingIngestor(
+
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {MY_TOKEN}"}) as client:
+        pipeline = ETLPipeline(
             client=client,
             checkpoint=UrlCheckpointStore(),
             flush_every=2000
         )
-        total = await ingestor.run(
-            start_url=station_url,
-            base_params=station_parameters
+        total = await pipeline.run(
+            start_url=met_obs_url,
+            base_params=met_obs_parameters
         )
         print(f"Ingestion completed: {total} rows downloaded to database")
 
