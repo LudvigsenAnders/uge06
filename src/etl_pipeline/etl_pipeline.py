@@ -1,9 +1,11 @@
 from __future__ import annotations
-from typing import Optional, Dict, Any, List, Tuple, Set, Protocol
+from typing import Optional, Dict, Any, List, Tuple, Set, Callable, AsyncContextManager
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import logging
 import httpx
 from etl_pipeline import data_request
+from etl_pipeline.checkpoint_store import UrlCheckpointStore
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.sqlalchemy_orm.observations import Observation
 from models.sqlalchemy_orm.stations import Station
 from models.pydantic_model import FeatureCollection, StationProperties, ObservationProperties, RecordsResponse
@@ -13,35 +15,14 @@ from .mapper import (station_from_feature_to_orm,
                      observations_from_DS18B20_to_ORM
                      )
 from db.connection import get_session
-from db.db_utils import QueryRunner
+#from db.db_utils import QueryRunner
 from etl_pipeline.postgresql_repository import save_stations, save_observations
+
 
 logger = logging.getLogger("etl_pipeline")
 
 
-# ---- Protocols / Interfaces for DI -----------------------------------------
-
-class CheckpointStore(Protocol):
-    async def load(self) -> Optional[str]:
-        pass
-
-    async def save(self, next_url: str) -> None:
-        pass
-
-    async def clear(self) -> None:
-        pass
-
-
-class SessionFactory(Protocol):
-    def __aiter__(self):
-        pass
-
-    async def __anext__(self):
-        pass
-
 # ---- Helpers ----------------------------------------------------------------
-
-
 def _canonicalize_url(url: str) -> str:
     parts = urlparse(url)
     query_pairs = parse_qsl(parts.query, keep_blank_values=True)
@@ -139,15 +120,15 @@ class ETLPipeline:
     def __init__(
         self,
         client: httpx.AsyncClient,
-        session_factory: SessionFactory = get_session,
-        checkpoint: Optional[CheckpointStore] = None,
+        session_factory: Callable[[], AsyncContextManager[AsyncSession]] = get_session,
+        checkpoint: Optional[UrlCheckpointStore] = None,
         *,
         flush_every: int = 2000,
         logger_: Optional[logging.Logger] = None,
     ) -> None:
         self.client = client
         self.session_factory = session_factory
-        self.checkpoint = checkpoint
+        self.checkpoint = checkpoint or UrlCheckpointStore(session_factory)
         self.flush_every = flush_every
         self.logger = logger_ or logger
 
@@ -164,7 +145,7 @@ class ETLPipeline:
         Returns total features processed.
         """
         url, params = await self._get_url_for_first_page(start_url, base_params)
-        self.logger.info("Streaming ingest starting for %s", start_url)
+        self.logger.info("ETL proces starting for %s", start_url)
 
         # First page
         page = await self._fetch_page(_build_url_with_params(url, params))
@@ -187,7 +168,7 @@ class ETLPipeline:
 
         # Final flush
         await self._final_flush()
-        self.logger.info("Streaming ingest completed. Total features processed: %s", self._total_features)
+        self.logger.info("ETL proces completed. Total features processed: %s", self._total_features)
         return self._total_features
 
     # ---- Internals ----
@@ -198,7 +179,7 @@ class ETLPipeline:
         base_params: Dict[str, Any]
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
         if self.checkpoint:
-            resume_url = await self.checkpoint.load()
+            resume_url = await self.checkpoint.load_checkpoint()
             if resume_url:
                 self.logger.info("Resuming ingestion from saved URL: %s", resume_url)
                 return resume_url, None
@@ -239,7 +220,7 @@ class ETLPipeline:
             if self.checkpoint:
                 nxt = data_request.extract_next_link(page)
                 if nxt:
-                    await self.checkpoint.save(nxt)
+                    await self.checkpoint.save_checkpoint(nxt)
 
         return data_request.extract_next_link(page)
 
@@ -258,9 +239,8 @@ class ETLPipeline:
         if not self._station_buf and not self._obs_buf:
             return
         self.logger.info("Flushing %s stations & %s observations.", len(self._station_buf), len(self._obs_buf))
-        async for session in self.session_factory():
-            q = QueryRunner(session)
-            async with q.transaction():
+        async with self.session_factory() as session:
+            async with session.begin():
                 if self._station_buf:
                     await save_stations(session, self._station_buf)
                 if self._obs_buf:
@@ -271,20 +251,20 @@ class ETLPipeline:
     async def _final_flush(self) -> None:
         await self._flush()
         if self.checkpoint:
-            await self.checkpoint.clear()
+            await self.checkpoint.clear_checkpoint()
 
     async def _should_continue(self, page: dict, n_features: int) -> bool:
         if n_features == 0:
             self.logger.info("No features returned for checkpoint URL -> end-of-stream.")
             if self.checkpoint:
-                await self.checkpoint.clear()
+                await self.checkpoint.clear_checkpoint()
             return False
 
         next_url = data_request.extract_next_link(page)
         if not next_url:
             self.logger.info("No `next` link -> final page.")
             if self.checkpoint:
-                await self.checkpoint.clear()
+                await self.checkpoint.clear_checkpoint()
             return True
 
         return True

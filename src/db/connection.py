@@ -1,8 +1,9 @@
 
 import os
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, create_async_engine)
-from sqlalchemy.orm import sessionmaker
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker)
+#from sqlalchemy.orm import sessionmaker
 from typing import AsyncGenerator, List, Dict, Any, Optional
 import asyncpg
 import logging
@@ -41,25 +42,39 @@ def _create_async_engine(sqlalchemy_url: str) -> AsyncEngine:
 # Create async session factory
 # -----------------------------------------------------------
 engine: AsyncEngine = _create_async_engine(SQLALCHEMY_URL)
-AsyncSessionLocal = sessionmaker(
+# AsyncSessionLocal = sessionmaker(
+#     engine,
+#     expire_on_commit=False,
+#     class_=AsyncSession,
+# )
+
+SessionFactory = async_sessionmaker(
     engine,
     expire_on_commit=False,
-    class_=AsyncSession,
 )
+
+
+# global or module-level
+_session_counter = 0
 
 
 # -----------------------------------------------------------
 # Dependency / helper to get a session
 # -----------------------------------------------------------
+@asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    logger.info("[DB] Opening a new async SQLAlchemy session...")
+    
+    global _session_counter
+    _session_counter += 1
 
-    async with AsyncSessionLocal() as session:
+    logger.info(f"[DB] Opening a new async SQLAlchemy session...{_session_counter}")
+
+    async with SessionFactory() as session:
         logger.info("[DB] Session opened. Acquiring DB connection from pool...")
         try:
             yield session
         finally:
-            logger.info("[DB] Session closing… Connection returned to pool.")
+            logger.info(f"[DB] Session closing… Connection returned to pool... {_session_counter}")
 
 
 # -----------------------------------------------------------
