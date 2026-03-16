@@ -12,8 +12,8 @@ def setup_logging(enabled: bool = True):
         logging.disable(logging.CRITICAL)
         return
 
-    # Level string set to DEBUG
-    level = "DEBUG"
+    # Level string set to DEBUG for debuging prints
+    level = "INFO"
     level = getattr(logging, level.upper(), logging.DEBUG)
     logging.basicConfig(
         level=level,
