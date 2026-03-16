@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import Optional, Dict, Any, List, Tuple, Set, Protocol
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import logging
@@ -17,7 +16,7 @@ from db.connection import get_session
 from db.db_utils import QueryRunner
 from etl_pipeline.postgresql_repository import save_stations, save_observations
 
-logger = logging.getLogger("ingestion")
+logger = logging.getLogger("etl_pipeline")
 
 
 # ---- Protocols / Interfaces for DI -----------------------------------------
@@ -179,9 +178,6 @@ class ETLPipeline:
 
         self._extend_buffers(st, obs, n)
         next_url = data_request.extract_next_link(page)
-
-        print("next_url: ", next_url)
-
 
         self.logger.info("Next URL extracted from first page: %s", next_url)
 

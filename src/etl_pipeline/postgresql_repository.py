@@ -2,7 +2,6 @@
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Iterable
-
 from models.sqlalchemy_orm.observations import Observation
 from models.sqlalchemy_orm.stations import Station
 
