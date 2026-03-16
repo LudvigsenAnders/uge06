@@ -5,14 +5,17 @@ from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, create_async_engi
 from sqlalchemy.orm import sessionmaker
 from typing import AsyncGenerator, List, Dict, Any, Optional
 import asyncpg
+import logging
 
+logger = logging.getLogger("connection")
 
 load_dotenv()
 SQLALCHEMY_URL = os.getenv("SQLALCHEMY_URL")
 ASYNC_PG_URL = os.getenv("ASYNC_PG_URL")
 MY_TOKEN = os.getenv("MY_TOKEN")
 _pool: Optional[asyncpg.pool.Pool] = None
-print("[DB] Loading DB module...")
+
+logger.info("[DB] Loading DB module...")
 
 
 # -----------------------------------------------------------
@@ -22,7 +25,8 @@ def _create_async_engine(sqlalchemy_url: str) -> AsyncEngine:
     """
     Create an async SQLAlchemy engine using the asyncpg driver.
     """
-    print("[DB] Creating async engine (connection pool starts here)...")
+    logger.info("[DB] Creating async engine (connection pool starts here)...")
+    print
     engine: AsyncEngine = create_async_engine(
         sqlalchemy_url,
         echo=False,        # set to True for SQL logging
@@ -48,21 +52,21 @@ AsyncSessionLocal = sessionmaker(
 # Dependency / helper to get a session
 # -----------------------------------------------------------
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    print("[DB] Opening a new async SQLAlchemy session...")
+    logger.info("[DB] Opening a new async SQLAlchemy session...")
 
     async with AsyncSessionLocal() as session:
-        print("[DB] Session opened. Acquiring DB connection from pool...")
+        logger.info("[DB] Session opened. Acquiring DB connection from pool...")
         try:
             yield session
         finally:
-            print("[DB] Session closing… Connection returned to pool.")
+            logger.info("[DB] Session closing… Connection returned to pool.")
 
 
 # -----------------------------------------------------------
 # Shutdown helper (optional)
 # -----------------------------------------------------------
 async def close_engine():
-    print("[DB] Disposing engine... Closing all pooled connections.")
+    logger.info("[DB] Disposing engine... Closing all pooled connections.")
     await engine.dispose()
 
 
@@ -75,7 +79,7 @@ async def init_asyncpg_pool(
 ):
     global _pool
     if _pool is None:
-        print("[STREAM] Initializing asyncpg connection pool...")
+        logger.info("[STREAM] Initializing asyncpg connection pool...")
         _pool = await asyncpg.create_pool(
             ASYNC_PG_URL,
             min_size=min_size,
@@ -97,7 +101,7 @@ async def stream(
     """
     pool = await init_asyncpg_pool()
 
-    print("[STREAM] Opening connection...")
+    logger.info("[STREAM] Opening connection...")
 
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -105,7 +109,7 @@ async def stream(
                 async for rec in conn.cursor(sql, *params):
                     yield dict(rec)
             finally:
-                print("[STREAM] Closing connection...")
+                logger.info("[STREAM] Closing connection...")
 
 
 # ---------------------------------------------------------
@@ -122,7 +126,7 @@ async def stream_batches(
     """
     pool = await init_asyncpg_pool()
 
-    print("[STREAM BATCH] Opening connection...")
+    logger.info("[STREAM BATCH] Opening connection...")
 
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -139,7 +143,7 @@ async def stream_batches(
                 if batch:
                     yield batch
             finally:
-                print("[STREAM BATCH] Closing connection...")
+                logger.info("[STREAM BATCH] Closing connection...")
 
 
 # ---------------------------------------------------------
@@ -148,7 +152,7 @@ async def stream_batches(
 async def close_asyncpg_pool():
     global _pool
     if _pool:
-        print("[STREAM] Closing asyncpg connection pool...")
+        logger.info("[STREAM] Closing asyncpg connection pool...")
         await _pool.close()
         _pool = None
 
@@ -165,9 +169,9 @@ async def inspect_pool(session: AsyncSession):
     engine = session.get_bind()
     pool = engine.pool
 
-    print("=== Connection Pool Stats ===")
-    print("Checked in connections:", pool.checkedin())
-    print("Checked out connections:", pool.checkedout())
-    print("Overflow connections:", pool.overflow())
-    print("Pool size:", pool.size())
-    print("=============================")
+    logger.info("=== Connection Pool Stats ===")
+    logger.info("Checked in connections:", pool.checkedin())
+    logger.info("Checked out connections:", pool.checkedout())
+    logger.info("Overflow connections:", pool.overflow())
+    logger.info("Pool size:", pool.size())
+    logger.info("=============================")
