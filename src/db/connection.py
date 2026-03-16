@@ -3,7 +3,6 @@ import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker)
-#from sqlalchemy.orm import sessionmaker
 from typing import AsyncGenerator, List, Dict, Any, Optional
 import asyncpg
 import logging
@@ -63,7 +62,7 @@ _session_counter = 0
 # -----------------------------------------------------------
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    
+
     global _session_counter
     _session_counter += 1
 

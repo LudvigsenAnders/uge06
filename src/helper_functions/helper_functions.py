@@ -1,10 +1,6 @@
 import logging
 from typing import Optional
-#from sqlalchemy import text
-#from db import connection
-#from db.db_utils import QueryRunner
 from datetime import datetime
-#from typing import Optional
 
 
 def setup_logging(enabled: bool = True):

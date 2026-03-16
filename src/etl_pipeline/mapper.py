@@ -2,21 +2,6 @@ from models.sqlalchemy_orm.stations import Station
 from models.sqlalchemy_orm.observations import Observation
 from models.pydantic_model import Feature, Record
 from helper_functions.helper_functions import parse_dt, to_list
-from datetime import datetime
-from typing import Optional
-
-
-# def parse_dt(value: Optional[str]) -> Optional[datetime]:
-#     if value is None:
-#         return None
-#     # Handle 'Z' (UTC) suffix
-#     return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
-# def to_list(value):
-#     if isinstance(value, list):
-#         return value
-#     return [value]
 
 
 def station_from_feature_to_orm(feature: Feature) -> Station:

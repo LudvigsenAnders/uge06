@@ -1,5 +1,3 @@
-
-# ingestion/checkpoint_store.py
 from typing import Optional
 from sqlalchemy import text
 
