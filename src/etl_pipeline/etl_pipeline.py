@@ -62,7 +62,7 @@ def parse_spac_api(raw: dict) -> Tuple[List, List, int]:
     '''
     --- Specialisterne API (RecordsResponse) ---
     '''
-    obs_rows: list[Observation] = []
+    observations: list[Observation] = []
     try:
         rr = RecordsResponse.model_validate(raw)
     except Exception as ex:
@@ -72,12 +72,12 @@ def parse_spac_api(raw: dict) -> Tuple[List, List, int]:
     # Convert each Record to ORM Observation rows
     for rec in rr.records:
         if hasattr(rec.reading, "BME280"):
-            obs_rows.extend(observations_from_bme280_to_ORM(rec))
+            observations.extend(observations_from_bme280_to_ORM(rec))
         elif hasattr(rec.reading, "DS18B20"):
-            obs_rows.append(observations_from_DS18B20_to_ORM(rec))
+            observations.append(observations_from_DS18B20_to_ORM(rec))
         else:
             logger.warning("Unknown reading type: %s", type(rec.reading))
-    return [], obs_rows, len(obs_rows)
+    return [], observations, len(observations)
 
 
 def parse_dmi_api(raw: dict) -> Tuple[List, List, int]:
