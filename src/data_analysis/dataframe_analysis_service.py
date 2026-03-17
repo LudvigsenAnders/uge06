@@ -1,9 +1,10 @@
 
 from __future__ import annotations
-
 from typing import Optional, Literal
 import pandas as pd
+import plotly.graph_objects as go
 from .dataframe_repository import AsyncObservationRepository
+
 
 class ObservationAnalysisService:
     """
@@ -103,10 +104,10 @@ class ObservationAnalysisService:
         if group_keys:
             out = (
                 df.groupby(group_keys)
-                  .resample("1D")
-                  .agg({"value": agg})
-                  .rename(columns={"value": agg})
-                  .reset_index()
+                .resample("1D")
+                .agg({"value": agg})
+                .rename(columns={"value": agg})
+                .reset_index()
             )
         else:
             out = df.resample("1D").agg({"value": agg}).rename(columns={"value": agg}).reset_index()
@@ -173,3 +174,8 @@ class ObservationAnalysisService:
             return pd.DataFrame(
                 [{"expected": expected, "actual": actual, "completeness_pct": completeness}]
             )
+
+    def plotter(self, df: pd.DataFrame):
+        # Using graph_objects
+        fig = go.Figure([go.Scatter(x=df["observed"], y=df["value"])])
+        fig.show()

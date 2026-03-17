@@ -1,5 +1,6 @@
 from helper_functions.helper_functions import setup_logging
 import httpx
+import sys
 import asyncio
 from db.connection import MY_TOKEN, get_session
 from db.init_db import init_db
@@ -8,6 +9,12 @@ from etl_pipeline.etl_pipeline import ETLPipeline
 from data_analysis.dataframe_repository import AsyncObservationRepository
 from data_analysis.dataframe_analysis_service import ObservationAnalysisService
 from helper_functions.helper_functions import parse_dt
+
+
+# --- Windows fix for asyncpg (required on Windows) ---
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 
 LOGGING = True
 MAX_CONCURRENCY = 5
@@ -59,7 +66,6 @@ async def analysis_service(station_id: str):
         repo = AsyncObservationRepository(q)
         svc = ObservationAnalysisService(repo)
 
-
         # Example 1: Data access only
         df_obs = await repo.get_observations_multi_station(
             station_ids=[station_id],
@@ -98,6 +104,8 @@ async def analysis_service(station_id: str):
             frequency="1h",
         )
         print(completeness)
+
+        svc.plotter(df_obs)
 
 
 SEM = asyncio.Semaphore(2)
