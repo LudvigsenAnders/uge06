@@ -23,8 +23,8 @@ async def etl():
 
     met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
     met_obs_parameters = {
-        "datetime": "2018-01-01T00:00:00Z/2018-03-31T00:00:00Z",
-        "stationId": "06072",
+        "datetime": "2018-01-01T00:00:00Z/2018-01-31T00:00:00Z",
+        #"stationId": "06072",
         "parameterId": "temp_dry",
         #"limit": 10,
         "sortorder": "observed,DESC"
@@ -49,9 +49,9 @@ async def etl():
         print(f"ETL proces completed: {total} rows processed")
 
 
-async def analysis_service():
+async def analysis_service(station_id: str):
     print("NOW IN DATAFRAME RUNNER")
-    session_factory = get_session  # you already have this
+    session_factory = get_session
 
     async with session_factory() as session:
 
@@ -59,9 +59,10 @@ async def analysis_service():
         repo = AsyncObservationRepository(q)
         svc = ObservationAnalysisService(repo)
 
+
         # Example 1: Data access only
         df_obs = await repo.get_observations_multi_station(
-            station_ids=["06072"],
+            station_ids=[station_id],
             since=parse_dt("2018-01-01T00:00:00Z"),
             until=parse_dt("2018-03-31T00:00:00Z")
         )
@@ -69,7 +70,7 @@ async def analysis_service():
 
         # Example 2: Daily stats
         daily = await svc.daily_stats_for_station(
-            station_id="06072",
+            station_id=station_id,
             parameter_id="temp_dry",
             since=parse_dt("2018-01-01T00:00:00Z"),
             until=parse_dt("2018-03-31T00:00:00Z"),
@@ -79,7 +80,7 @@ async def analysis_service():
 
         # Example 3: Anomalies
         anomalies = await svc.anomalies_zscore_for_station(
-            station_id="06072",
+            station_id=station_id,
             parameter_id="temp_dry",
             since=parse_dt("2018-01-01T00:00:00Z"),
             until=parse_dt("2018-03-31T00:00:00Z"),
@@ -90,7 +91,7 @@ async def analysis_service():
 
         # Example 4: Completeness
         completeness = await svc.completeness_report(
-            station_id="06072",
+            station_id=station_id,
             parameter_id="temp_dry",
             since=parse_dt("2018-01-01T00:00:00Z"),
             until=parse_dt("2018-03-31T00:00:00Z"),
@@ -100,8 +101,11 @@ async def analysis_service():
 
 
 async def main():
-    await etl()
-    await analysis_service()
+    station_ids = ["06072", "06073", "06074"]
+    #await etl()
+    #result = await analysis_service()
+    results = await asyncio.gather(*(analysis_service(s) for s in station_ids))
+    print("Parallel finished:")
 
 if __name__ == "__main__":
     asyncio.run(main())

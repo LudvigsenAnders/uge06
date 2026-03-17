@@ -31,6 +31,7 @@ def _create_async_engine(sqlalchemy_url: str) -> AsyncEngine:
         sqlalchemy_url,
         echo=False,        # set to True for SQL logging
         future=True,
+        pool_pre_ping=True,
         pool_size=10,      # max number of open connections
         max_overflow=20,   # extra temporary connections
     )

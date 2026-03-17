@@ -40,7 +40,7 @@ def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
 
 def parse_spac_api(raw: dict) -> Tuple[List, List, int]:
     '''
-    --- Specialisterne API (RecordsResponse) ---
+    Specialisterne API (RecordsResponse)
     '''
     observations: list[Observation] = []
     try:
@@ -61,6 +61,9 @@ def parse_spac_api(raw: dict) -> Tuple[List, List, int]:
 
 
 def parse_dmi_api(raw: dict) -> Tuple[List, List, int]:
+    '''
+    DMI API (Stations or Observations) 
+    '''
     stations: list[Station] = []
     observations: list[Observation] = []
 
