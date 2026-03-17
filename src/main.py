@@ -100,11 +100,20 @@ async def analysis_service(station_id: str):
         print(completeness)
 
 
+SEM = asyncio.Semaphore(2)
+
+
+async def guarded(fn, *args, **kwargs):
+    async with SEM:
+        return await fn(*args, **kwargs)
+
+
 async def main():
     station_ids = ["06072", "06073", "06074"]
     #await etl()
     #result = await analysis_service()
-    results = await asyncio.gather(*(analysis_service(s) for s in station_ids))
+    #results = await asyncio.gather(*(analysis_service(s) for s in station_ids))
+    results = await asyncio.gather(*(guarded(analysis_service, s) for s in station_ids))
     print("Parallel finished:")
 
 if __name__ == "__main__":
