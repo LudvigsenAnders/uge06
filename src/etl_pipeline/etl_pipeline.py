@@ -24,6 +24,14 @@ logger = logging.getLogger("etl_pipeline")
 
 # ---- Helpers ----------------------------------------------------------------
 def _canonicalize_url(url: str) -> str:
+    """Canonicalize a URL by sorting query parameters for consistent comparison.
+
+    Args:
+        url: The URL to canonicalize.
+
+    Returns:
+        The canonicalized URL with sorted query parameters.
+    """
     parts = urlparse(url)
     query_pairs = parse_qsl(parts.query, keep_blank_values=True)
     query_sorted = urlencode(sorted(query_pairs))
@@ -31,6 +39,15 @@ def _canonicalize_url(url: str) -> str:
 
 
 def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
+    """Build a URL with query parameters, sorting them for consistency.
+
+    Args:
+        url: The base URL.
+        params: Dictionary of query parameters to add.
+
+    Returns:
+        The URL with sorted query parameters appended.
+    """
     if not params:
         return url
     query_sorted = urlencode(sorted(params.items()))
@@ -39,9 +56,17 @@ def _build_url_with_params(url: str, params: Optional[Dict[str, Any]]) -> str:
 
 
 def parse_spac_api(raw: dict) -> Tuple[List, List, int]:
-    '''
-    Specialisterne API (RecordsResponse)
-    '''
+    """Parse Specialisterne API response (RecordsResponse) into ORM objects.
+    Takes raw JSON respone validates against the Pydantic RecordsResponse model and
+    Return a Tuple with list of records
+
+    Args:
+        raw: Raw JSON response from Specialisterne API.
+
+    Returns:
+        Tuple of (stations, observations, total_count).
+        Stations list is always empty for this API.
+    """
     observations: list[Observation] = []
     try:
         rr = RecordsResponse.model_validate(raw)
@@ -61,9 +86,15 @@ def parse_spac_api(raw: dict) -> Tuple[List, List, int]:
 
 
 def parse_dmi_api(raw: dict) -> Tuple[List, List, int]:
-    '''
-    DMI API (Stations or Observations) 
-    '''
+    """Parse DMI API response (FeatureCollection) into ORM objects.
+    Takes raw JSON respone validates against the Pydantic FeatureCollection model and
+    Return a Tuple with list of stations or list of observations
+    Args:
+        raw: Raw JSON response from DMI API.
+
+    Returns:
+        Tuple of (stations, observations, total_count).
+    """
     stations: list[Station] = []
     observations: list[Observation] = []
 
@@ -181,6 +212,16 @@ class ETLPipeline:
         start_url: str,
         base_params: Dict[str, Any]
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """Determine the starting URL and parameters, checking for checkpoints.
+
+        Args:
+            start_url: The initial URL to start ingestion from.
+            base_params: Base query parameters for the initial request.
+
+        Returns:
+            Tuple of (url, params) to use for the first page request.
+            If resuming from checkpoint, params will be None.
+        """
         if self.checkpoint:
             resume_url = await self.checkpoint.load_checkpoint()
             if resume_url:
@@ -190,6 +231,14 @@ class ETLPipeline:
         return start_url, base_params
 
     async def _fetch_page(self, url_with_params: str) -> Optional[dict]:
+        """Fetch a page from the API with retry logic and duplicate detection.
+
+        Args:
+            url_with_params: The full URL with parameters to fetch.
+
+        Returns:
+            The JSON response as a dictionary, or None if failed or already visited.
+        """
         canon = _canonicalize_url(url_with_params)
         if canon in self._visited:
             self.logger.info("Already visited %s; skipping.", url_with_params)
@@ -211,6 +260,20 @@ class ETLPipeline:
         return page
 
     async def _fetch_transform_and_maybe_flush(self, next_url: str) -> Optional[str]:
+        """Fetch a page from a URL, 
+        transform data: takes the dict(page) do transformations before loading into Postgresql database
+        and flush buffers into database if needed.
+
+        TODO: Remove the start of new session factory from URLCheckpointStore and refactor
+        etl_pipeline._fetch_transform_and_maybe_flush so that, await self.checkpoint.save_checkpoint(nxt)
+        is inside etl_pipeline._flush instead.
+
+        Args:
+            next_url: The URL of the next page to process.
+
+        Returns:
+            The URL of the following page, or None if no more pages.
+        """
         page = await self._fetch_page(next_url)
         if not page:
             return None
@@ -228,17 +291,34 @@ class ETLPipeline:
         return data_request.extract_next_link(page)
 
     def _extend_buffers(self, stations: List, observations: List, n_features: int) -> None:
+        """Add parsed data to internal buffers and update counters.
+
+        Args:
+            stations: List of station ORM objects to buffer.
+            observations: List of observation ORM objects to buffer.
+            n_features: Number of features processed.
+        """
         self._station_buf.extend(stations)
         self._obs_buf.extend(observations)
         self._total_features += n_features
 
     def _should_flush(self) -> bool:
+        """Check if buffers should be flushed to the database.
+
+        Returns:
+            True if any buffer exceeds the flush threshold.
+        """
         total = len(self._station_buf) + len(self._obs_buf)
         return total >= self.flush_every or \
             len(self._station_buf) >= self.flush_every or \
             len(self._obs_buf) >= self.flush_every
 
     async def _flush(self) -> None:
+        """Flush buffered data to the database.
+
+        Saves all buffered stations and observations to the database
+        and clears the buffers.
+        """
         if not self._station_buf and not self._obs_buf:
             return
         self.logger.info("Flushing %s stations & %s observations.", len(self._station_buf), len(self._obs_buf))
@@ -252,11 +332,25 @@ class ETLPipeline:
         self._obs_buf.clear()
 
     async def _final_flush(self) -> None:
+        """Perform final flush and clear checkpoints.
+
+        Flushes any remaining buffered data and clears the checkpoint
+        to indicate completion.
+        """
         await self._flush()
         if self.checkpoint:
             await self.checkpoint.clear_checkpoint()
 
     async def _should_continue(self, page: dict, n_features: int) -> bool:
+        """Determine if ingestion should continue based on page content.
+
+        Args:
+            page: The fetched page data.
+            n_features: Number of features in the page.
+
+        Returns:
+            True if processing should continue, False if it should stop.
+        """
         if n_features == 0:
             self.logger.info("No features returned for checkpoint URL -> end-of-stream.")
             if self.checkpoint:

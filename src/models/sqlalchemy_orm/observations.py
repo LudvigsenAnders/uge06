@@ -5,16 +5,20 @@ import uuid
 from sqlalchemy import String, Float, TIMESTAMP, UniqueConstraint, BigInteger, Identity
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
-
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 
 
-# If using Postgres, prefer JSONB and native UUID.
-# If using SQLite, JSONB/UUID won't be available; use to String/JSON.
-
-
 class Observation(Base):
+    """SQLAlchemy model for meteorological observations.
+
+    Represents individual measurement readings from weather stations,
+    including temperature, pressure, humidity, and other parameters.
+
+    If using Postgres, prefer JSONB and native UUID.
+    If using SQLite, JSONB/UUID won't be available; use to String/JSON.
+
+    """
     __tablename__ = "observations"
 
     __table_args__ = (

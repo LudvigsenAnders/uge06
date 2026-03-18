@@ -4,6 +4,14 @@ from datetime import datetime
 
 
 def setup_logging(enabled: bool = True):
+    """Configure logging for the application.
+
+    Sets up basic logging configuration with a standardized format.
+    Prevents duplicate handlers if called multiple times.
+
+    Args:
+        enabled: Whether to enable logging. If False, disables all logging.
+    """
     if logging.getLogger().hasHandlers():
         return  # prevent duplicate handlers
 
@@ -23,6 +31,16 @@ def setup_logging(enabled: bool = True):
 
 
 def parse_dt(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO datetime string into a datetime object.
+
+    Handles UTC timezone ('Z' suffix) by converting to '+00:00'.
+
+    Args:
+        value: ISO datetime string, or None.
+
+    Returns:
+        Parsed datetime object, or None if input was None.
+    """
     if value is None:
         return None
     # Handle 'Z' (UTC) suffix
@@ -30,6 +48,17 @@ def parse_dt(value: Optional[str]) -> Optional[datetime]:
 
 
 def to_list(value):
+    """Ensure a value is wrapped in a list.
+
+    If the value is already a list, returns it unchanged.
+    Otherwise, wraps the value in a single-element list.
+
+    Args:
+        value: Any value to potentially wrap in a list.
+
+    Returns:
+        A list containing the value.
+    """
     if isinstance(value, list):
         return value
     return [value]

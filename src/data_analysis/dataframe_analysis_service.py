@@ -86,6 +86,16 @@ class ObservationAnalysisService:
     # --- Pure DataFrame transforms (testable without DB) ---
 
     def _daily_aggregate(self, df: pd.DataFrame, agg: str = "mean") -> pd.DataFrame:
+        """Aggregate observation data to daily frequency.
+
+        Args:
+            df: DataFrame with observation data containing 'observed' and 'value' columns.
+            agg: Aggregation function to apply ('mean', 'sum', 'min', 'max', 'median').
+
+        Returns:
+            DataFrame with daily aggregated values.
+        """
+
         if df is None or df.empty:
             return pd.DataFrame()
 
@@ -120,6 +130,16 @@ class ObservationAnalysisService:
         z_threshold: float = 3.0,
         rolling: Optional[str] = "7D",
     ) -> pd.DataFrame:
+        """Detect anomalies using z-score method.
+
+        Args:
+            df: DataFrame with observation data.
+            z_threshold: Z-score threshold for anomaly detection.
+            rolling: Rolling window for calculating mean/std (e.g., '7D' for 7 days).
+
+        Returns:
+            DataFrame containing detected anomalies with z-scores.
+        """
         if df is None or df.empty or "value" not in df.columns:
             return pd.DataFrame()
 
@@ -176,6 +196,11 @@ class ObservationAnalysisService:
             )
 
     def plotter(self, df: pd.DataFrame):
+        """Create and display a time series plot of observation data.
+
+        Args:
+            df: DataFrame with 'observed' and 'value' columns to plot.
+        """
         # Using graph_objects
         fig = go.Figure([go.Scatter(x=df["observed"], y=df["value"])])
         fig.show()

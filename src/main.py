@@ -1,3 +1,11 @@
+"""
+Main entry point for the meteorological data ETL and analysis pipeline.
+
+This module orchestrates the extraction, transformation, and loading (ETL) of
+meteorological data from DMI APIs and performs data analysis on the collected
+observations.
+"""
+
 from helper_functions.helper_functions import setup_logging
 import httpx
 import sys
@@ -21,6 +29,38 @@ MAX_CONCURRENCY = 5
 
 
 async def etl():
+    """Run the ETL pipeline to fetch and process meteorological data.
+
+    Fetches station and observation data from DMI APIs, transforms it,
+    and loads it into the database. Uses checkpointing to resume from
+    interruptions.
+    """
+    setup_logging(LOGGING)
+    await init_db()
+
+    station_url = "https://opendataapi.dmi.dk/v2/metObs/collections/station/items"
+    station_parameters = {}
+
+    met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
+    met_obs_parameters = {
+        "datetime": "2018-01-01T00:00:00Z/2018-01-31T00:00:00Z",
+        #"stationId": "06072",
+        "parameterId": "temp_dry",
+        #"limit": 10,
+        "sortorder": "observed,DESC"
+    }
+
+    spac_url = "https://climate.spac.dk/api/records"
+    spac_parameters = {
+        #"from": "2026-02-27T09:32:45Z",
+        "limit": "250"
+    }
+
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {MY_TOKEN}"}) as client:
+        pipeline = ETLPipeline(
+            client=client,
+            session_factory=get_session,
+            flush_every=2000
 
     setup_logging(LOGGING)
     await init_db()
@@ -57,6 +97,18 @@ async def etl():
 
 
 async def analysis_service(station_id: str):
+    """Run data analysis examples for a specific weather station.
+
+    Demonstrates various data analysis capabilities including:
+    - Raw observation data retrieval
+    - Daily statistics aggregation
+    - Anomaly detection using z-score
+    - Data completeness reporting
+    - Data visualization
+
+    Args:
+        station_id: The identifier of the weather station to analyze.
+    """
     print("NOW IN DATAFRAME RUNNER")
     session_factory = get_session
 
@@ -112,11 +164,29 @@ SEM = asyncio.Semaphore(2)
 
 
 async def guarded(fn, *args, **kwargs):
+    """Execute a function with concurrency control using a semaphore.
+
+    Limits concurrent execution to prevent overwhelming the database
+    or external APIs.
+
+    Args:
+        fn: The async function to execute.
+        *args: Positional arguments for the function.
+        **kwargs: Keyword arguments for the function.
+
+    Returns:
+        The result of the function execution.
+    """
     async with SEM:
         return await fn(*args, **kwargs)
 
 
 async def main():
+    """Main entry point that runs analysis for multiple stations in parallel.
+
+    Demonstrates concurrent processing of multiple weather stations
+    with controlled concurrency to avoid resource exhaustion.
+    """
     station_ids = ["06072", "06073", "06074"]
     #await etl()
     #result = await analysis_service()

@@ -7,6 +7,11 @@ from .base import Base
 
 
 class URLCheckpoint(Base):
+    """SQLAlchemy model for ETL checkpointing.
+
+    Stores the next URL to process during paginated data ingestion,
+    allowing the ETL pipeline to resume from interruptions.
+    """
     __tablename__ = "ingest_checkpoint"
 
     __table_args__ = (

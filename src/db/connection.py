@@ -1,4 +1,11 @@
 
+"""
+Database connection management for the meteorological data pipeline.
+
+This module provides async database connections using SQLAlchemy and asyncpg,
+including connection pooling, session management, and data streaming utilities.
+"""
+
 import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
@@ -63,7 +70,11 @@ _session_counter = 0
 # -----------------------------------------------------------
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """Get an async SQLAlchemy session from the connection pool.
 
+    Yields:
+        AsyncSession: A database session for executing queries.
+    """
     global _session_counter
     _session_counter += 1
 
@@ -81,6 +92,10 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 # Shutdown helper (optional)
 # -----------------------------------------------------------
 async def close_engine():
+    """Dispose of the SQLAlchemy engine and close all connections.
+
+    Should be called during application shutdown to clean up resources.
+    """
     logger.info("[DB] Disposing engine... Closing all pooled connections.")
     await engine.dispose()
 
@@ -92,6 +107,15 @@ async def init_asyncpg_pool(
     min_size: int = 1,
     max_size: int = 10,
 ):
+    """Initialize the asyncpg connection pool for streaming operations.
+
+    Args:
+        min_size: Minimum number of connections to maintain.
+        max_size: Maximum number of connections allowed.
+
+    Returns:
+        The asyncpg connection pool instance.
+    """
     global _pool
     if _pool is None:
         logger.info("[STREAM] Initializing asyncpg connection pool...")

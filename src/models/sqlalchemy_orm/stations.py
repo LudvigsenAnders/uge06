@@ -12,6 +12,11 @@ from .base import Base
 
 
 class Station(Base):
+    """SQLAlchemy model for weather stations.
+
+    Represents meteorological observation stations with their metadata,
+    location information, and operational details.
+    """
     __tablename__ = "stations"
 
     __table_args__ = (

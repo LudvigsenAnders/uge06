@@ -71,6 +71,14 @@ class AsyncObservationRepository:
 
     # --- Internal helpers ---
     def _coerce_dtypes(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Coerce DataFrame columns to appropriate data types.
+
+        Args:
+            df: Raw DataFrame from database query.
+
+        Returns:
+            DataFrame with properly typed columns.
+        """
         if df is None or df.empty:
             return pd.DataFrame()
         # Normalize expected dtypes

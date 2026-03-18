@@ -5,7 +5,14 @@ from helper_functions.helper_functions import parse_dt, to_list
 
 
 def station_from_feature_to_orm(feature: Feature) -> Station:
+    """Convert a DMI API Feature (station) to a Station ORM object.
 
+    Args:
+        feature: Pydantic Feature model containing station data from DMI API.
+
+    Returns:
+        Station ORM object ready for database insertion.
+    """
     p = feature.properties
     lon, lat = feature.geometry.coordinates
 
@@ -37,7 +44,13 @@ def station_from_feature_to_orm(feature: Feature) -> Station:
 
 
 def observation_from_feature_to_orm(feature: Feature) -> Observation:
+    """Convert a DMI API Feature (observation) to an Observation ORM object.
+    Args:
+        feature: Pydantic Feature model containing observation data from DMI API.
 
+    Returns:
+        Observation ORM object ready for database insertion.
+    """
     p = feature.properties
     lon, lat = feature.geometry.coordinates
 
@@ -55,6 +68,17 @@ def observation_from_feature_to_orm(feature: Feature) -> Observation:
 
 
 def observations_from_bme280_to_ORM(rec: Record) -> list[Observation]:
+    """Convert a BME280 sensor Record to multiple Observation ORM objects.
+
+    Creates separate observations for temperature, pressure, and humidity
+    from a single BME280 sensor reading.
+
+    Args:
+        rec: Pydantic Record model containing BME280 sensor data.
+
+    Returns:
+        List of three Observation ORM objects (temp, pressure, humidity).
+    """
     r = rec.reading.BME280
     ts = rec.timestamp
     base = dict(
@@ -74,6 +98,14 @@ def observations_from_bme280_to_ORM(rec: Record) -> list[Observation]:
 
 
 def observations_from_DS18B20_to_ORM(rec: Record) -> list[Observation]:
+    """Convert a DS18B20 sensor Record to an Observation ORM object.
+
+    Args:
+        rec: Pydantic Record model containing DS18B20 sensor data.
+
+    Returns:
+        Single Observation ORM object for the raw temperature reading.
+    """
     r = rec.reading.DS18B20
     ts = rec.timestamp
     base = dict(
