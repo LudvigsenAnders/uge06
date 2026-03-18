@@ -5,15 +5,15 @@ from db.db_utils import QueryRunner
 from db.connection import get_session
 
 
-async def runner():
-    async for session in get_session():
-        q = QueryRunner(session)
-        async with q.transaction():
-            query = "SELECT * FROM observations WHERE station_id = :id"
-            params = {'id': "06072"}
-            df_observations: pd.DataFrame = await q.dataframe(query, params)
+# async def runner():
+#     async for session in get_session():
+#         q = QueryRunner(session)
+#         async with q.transaction():
+#             query = "SELECT * FROM observations WHERE station_id = :id"
+#             params = {'id': "06072"}
+#             df_observations: pd.DataFrame = await q.dataframe(query, params)
 
-            print(df_observations.info())
+#             print(df_observations.info())
 
 
 class AsyncObservationRepository:
@@ -35,6 +35,7 @@ class AsyncObservationRepository:
         """
         Fetch observations for multiple stations (and optional variable filter).
         Uses a temporary IN-list; for very large lists consider JOIN with temp table.
+        Date format: "2018-02-21T08:50:00Z" , yyyy-MM-ddThh:mm:ssZ
         """
         if not station_ids:
             return pd.DataFrame()
