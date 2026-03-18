@@ -195,7 +195,7 @@ class ObservationAnalysisService:
                 [{"expected": expected, "actual": actual, "completeness_pct": completeness}]
             )
 
-    def plotter(self, df: pd.DataFrame):
+    def plotter(self, df: pd.DataFrame) -> None:
         """Create and display a time series plot of observation data.
 
         Args:

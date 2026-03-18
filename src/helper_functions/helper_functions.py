@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, List, Any
 from datetime import datetime
 
 
@@ -47,7 +47,7 @@ def parse_dt(value: Optional[str]) -> Optional[datetime]:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def to_list(value):
+def to_list(value: Any) -> List[Any]:
     """Ensure a value is wrapped in a list.
 
     If the value is already a list, returns it unchanged.

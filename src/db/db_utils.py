@@ -2,6 +2,7 @@ from typing import Any, Dict, Optional, List, Tuple, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import Result
 from sqlalchemy import text, bindparam
+from sqlalchemy.sql.expression import TextClause
 import pandas as pd
 
 
@@ -25,7 +26,7 @@ class QueryRunner:
     # Internal: Detect list/tuple params and enable expanding=True
     # -----------------------------------------------------
 
-    def _prepare_statement(self, sql: str, params: Optional[Dict[str, Any]]):
+    def _prepare_statement(self, sql: str, params: Optional[Dict[str, Any]]) -> TextClause:
         """
         Automatically convert list/tuple params into expanding bindparams.
         Example:
@@ -139,7 +140,7 @@ class QueryRunner:
         table: str,
         values: Dict[str, Any],
         returning: Optional[str] = None,
-    ):
+    ) -> Union[int, Any]:
         """
         INSERT INTO table (cols...) VALUES (:vals...)
         Optional: RETURNING id
@@ -163,7 +164,7 @@ class QueryRunner:
         where: str,
         params: Optional[Dict[str, Any]] = None,
         returning: Optional[str] = None,
-    ):
+    ) -> Union[int, Any]:
         """
         UPDATE table SET a=:a, b=:b WHERE ...
         Optional: RETURNING field
@@ -187,7 +188,7 @@ class QueryRunner:
         where: str,
         params: Optional[Dict[str, Any]] = None,
         returning: Optional[str] = None,
-    ):
+    ) -> Union[int, Any]:
         """
         DELETE FROM table WHERE ...
         Optional: RETURNING field
@@ -204,7 +205,7 @@ class QueryRunner:
     # -----------------------------------------------------
     # Bulk operations
     # -----------------------------------------------------
-    async def bulk_insert(self, table: str, rows: list[dict]):
+    async def bulk_insert(self, table: str, rows: list[dict]) -> int:
         """
         Bulk insert using one INSERT ... VALUES ... statement.
         rows = [ {"col":val,...}, {"col":val,...} ]
@@ -222,7 +223,7 @@ class QueryRunner:
         result = await self.session.execute(stmt, rows)
         return result.rowcount or len(rows)
 
-    async def bulk_update(self, table: str, rows: list[dict], key: str):
+    async def bulk_update(self, table: str, rows: list[dict], key: str) -> int:
         """
         Bulk update.
         rows MUST contain the key column (PK or unique).
@@ -251,9 +252,9 @@ class QueryRunner:
         table: str,
         rows: list[dict],
         *,
-        keys: list[str] = None,
-        returning: str | None = None,
-    ):
+        keys: Optional[list[str]] = None,
+        returning: Optional[str] = None,
+    ) -> Union[List[Any], int]:
         """
         Bulk delete:
         rows = [{key1: val1, key2: val2, ...}, ...]
@@ -289,7 +290,7 @@ class QueryRunner:
     # -----------------------------------------------------
     # Dataframe helper
     # -----------------------------------------------------
-    async def dataframe(self, sql: str, params=None):
+    async def dataframe(self, sql: str, params: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
         """
         Execute a query and return results as a pandas DataFrame.
         Requires pandas to be installed.
@@ -300,7 +301,7 @@ class QueryRunner:
     # -----------------------------------------------------
     # Transaction context manager
     # -----------------------------------------------------
-    def transaction(self):
+    def transaction(self) -> "_AutoCleanupTransaction":
         """
         Usage:
             async with QueryRunner(session).transaction():

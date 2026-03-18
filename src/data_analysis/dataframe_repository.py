@@ -70,6 +70,28 @@ class AsyncObservationRepository:
         df = await self.qr.dataframe(sql, params)
         return self._coerce_dtypes(df)
 
+    async def get_observations_by_station(
+        self,
+        station_id: str,
+        parameter_id: Optional[str] = None,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Fetch observations for a single station.
+
+        Args:
+            station_id: The station identifier.
+            parameter_id: Optional parameter filter.
+            since: Optional start date filter.
+            until: Optional end date filter.
+
+        Returns:
+            DataFrame with observation data.
+        """
+        return await self.get_observations_multi_station(
+            [station_id], parameter_id=parameter_id, since=since, until=until
+        )
+
     # --- Internal helpers ---
     def _coerce_dtypes(self, df: pd.DataFrame) -> pd.DataFrame:
         """Coerce DataFrame columns to appropriate data types.

@@ -10,6 +10,7 @@ from helper_functions.helper_functions import setup_logging
 import httpx
 import sys
 import asyncio
+from typing import Callable, Any
 from db.connection import MY_TOKEN, get_session
 from db.init_db import init_db
 from db.db_utils import QueryRunner
@@ -96,7 +97,7 @@ async def etl():
         print(f"ETL proces completed: {total} rows processed")
 
 
-async def analysis_service(station_id: str):
+async def analysis_service(station_id: str) -> None:
     """Run data analysis examples for a specific weather station.
 
     Demonstrates various data analysis capabilities including:
@@ -163,7 +164,7 @@ async def analysis_service(station_id: str):
 SEM = asyncio.Semaphore(2)
 
 
-async def guarded(fn, *args, **kwargs):
+async def guarded(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Execute a function with concurrency control using a semaphore.
 
     Limits concurrent execution to prevent overwhelming the database
@@ -181,7 +182,7 @@ async def guarded(fn, *args, **kwargs):
         return await fn(*args, **kwargs)
 
 
-async def main():
+async def main() -> None:
     """Main entry point that runs analysis for multiple stations in parallel.
 
     Demonstrates concurrent processing of multiple weather stations

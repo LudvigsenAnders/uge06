@@ -1,7 +1,7 @@
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Iterable
+from typing import Iterable, List, AsyncGenerator
 from models.sqlalchemy_orm.observations import Observation
 from models.sqlalchemy_orm.stations import Station
 
@@ -9,7 +9,7 @@ from models.sqlalchemy_orm.stations import Station
 BATCH_SIZE = 500
 
 
-async def _chunked(iterable: Iterable, size: int):
+async def _chunked(iterable: Iterable, size: int) -> AsyncGenerator[List, None]:
     """Yield items in batches of size N."""
     batch = []
     for item in iterable:
@@ -24,7 +24,7 @@ async def _chunked(iterable: Iterable, size: int):
 # -------------------------------------------------------------------
 # SAVE OBSERVATIONS (WITH BATCHING)
 # -------------------------------------------------------------------
-async def save_observations(session: AsyncSession, obs_rows: list[Observation]):
+async def save_observations(session: AsyncSession, obs_rows: list[Observation]) -> None:
     """
     Insert observations into PostgreSQL using ON CONFLICT DO NOTHING
     in batches to achieve high throughput.
@@ -69,7 +69,7 @@ async def save_observations(session: AsyncSession, obs_rows: list[Observation]):
 # -------------------------------------------------------------------
 # SAVE STATIONS (WITH BATCHING)
 # -------------------------------------------------------------------
-async def save_stations(session: AsyncSession, station_rows: list[Station]):
+async def save_stations(session: AsyncSession, station_rows: list[Station]) -> None:
     """
     UPSERT stations into PostgreSQL using ON CONFLICT DO UPDATE.
     Updates fields when a station already exists (same primary key 'id').

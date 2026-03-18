@@ -1,6 +1,6 @@
 import httpx
 import asyncio
-from typing import Optional
+from typing import Optional, Dict, Any, Callable
 # from collections.abc import AsyncIterator
 import logging
 
@@ -19,7 +19,7 @@ async def _make_request(client: httpx.AsyncClient, url: str, params: dict | None
         return await client.get(url, params=params)
 
 
-async def request_data(client: httpx.AsyncClient, url: str, params: dict | None):
+async def request_data(client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
     Fetches a page from the API with correct handling:
     - If url already contains querystring → params MUST be None
@@ -64,7 +64,7 @@ def extract_next_link(payload: dict) -> Optional[str]:
     return None
 
 
-async def retry_async(fn, *args, retries=5, delay=1, **kwargs):
+async def retry_async(fn: Callable[..., Any], *args: Any, retries: int = 5, delay: int = 1, **kwargs: Any) -> Any:
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"Attempt {attempt}/{retries} for function {fn.__name__}")
