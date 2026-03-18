@@ -19,7 +19,9 @@ async def _make_request(client: httpx.AsyncClient, url: str, params: dict | None
         return await client.get(url, params=params)
 
 
-async def request_data(client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+async def request_data(client: httpx.AsyncClient,
+                       url: str,
+                       params: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
     Fetches a page from the API with correct handling:
     - If url already contains querystring → params MUST be None

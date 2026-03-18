@@ -14,7 +14,6 @@ class UrlCheckpointStore:
     etl_pipeline._fetch_transform_and_maybe_flush so that, await self.checkpoint.save_checkpoint(nxt)
     is inside etl_pipeline._flush instead.
 
-
     """
 
     def __init__(self, session_factory):
@@ -58,8 +57,6 @@ class UrlCheckpointStore:
         Called when ETL processing is complete to prevent resuming
         from an outdated checkpoint.
         """
-        print("CLEARING CHECKPOINT")
-
         async with self.session_factory() as session:
             await session.execute(text("DELETE FROM ingest_checkpoint WHERE id = 1"))
             await session.commit()

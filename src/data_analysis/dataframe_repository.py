@@ -2,18 +2,6 @@
 from typing import Optional, Any
 import pandas as pd
 from db.db_utils import QueryRunner
-from db.connection import get_session
-
-
-# async def runner():
-#     async for session in get_session():
-#         q = QueryRunner(session)
-#         async with q.transaction():
-#             query = "SELECT * FROM observations WHERE station_id = :id"
-#             params = {'id': "06072"}
-#             df_observations: pd.DataFrame = await q.dataframe(query, params)
-
-#             print(df_observations.info())
 
 
 class AsyncObservationRepository:

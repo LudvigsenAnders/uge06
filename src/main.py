@@ -17,7 +17,7 @@ from db.db_utils import QueryRunner
 from etl_pipeline.etl_pipeline import ETLPipeline
 from data_analysis.dataframe_repository import AsyncObservationRepository
 from data_analysis.dataframe_analysis_service import ObservationAnalysisService
-from helper_functions.helper_functions import parse_dt
+from helper_functions.helper_functions import parse_dt, month_range_to_datetime
 
 
 # --- Windows fix for asyncpg (required on Windows) ---
@@ -42,48 +42,22 @@ async def etl():
     station_url = "https://opendataapi.dmi.dk/v2/metObs/collections/station/items"
     station_parameters = {}
 
+    met_obs_period, start_date, end_date = month_range_to_datetime("2025-01", "2025-01")
+    print(met_obs_period)
     met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
     met_obs_parameters = {
-        "datetime": "2018-01-01T00:00:00Z/2018-01-31T00:00:00Z",
-        #"stationId": "06072",
-        "parameterId": "temp_dry",
-        #"limit": 10,
+        "datetime": met_obs_period,  # "2025-01-01T00:00:00Z/2025-01-31T00:00:00Z"
+        "stationId": "06072",  # Ødum: "06072", Årslev: "06126", Landbohøjskolen: "06186"
+        #"parameterId": "temp_dry",
+        "limit": 5000,
         "sortorder": "observed,DESC"
     }
 
     spac_url = "https://climate.spac.dk/api/records"
     spac_parameters = {
-        #"from": "2026-02-27T09:32:45Z",
-        "limit": "250"
+        "from": "2025-01-01T00:00:00Z",
+        "limit": "1000000"
     }
-
-    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {MY_TOKEN}"}) as client:
-        pipeline = ETLPipeline(
-            client=client,
-            session_factory=get_session,
-            flush_every=2000
-
-    setup_logging(LOGGING)
-    await init_db()
-
-    station_url = "https://opendataapi.dmi.dk/v2/metObs/collections/station/items"
-    station_parameters = {}
-
-    met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
-    met_obs_parameters = {
-        "datetime": "2018-01-01T00:00:00Z/2018-01-31T00:00:00Z",
-        #"stationId": "06072",
-        "parameterId": "temp_dry",
-        #"limit": 10,
-        "sortorder": "observed,DESC"
-    }
-
-    spac_url = "https://climate.spac.dk/api/records"
-    spac_parameters = {
-        #"from": "2026-02-27T09:32:45Z",
-        "limit": "250"
-    }
-
     async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {MY_TOKEN}"}) as client:
         pipeline = ETLPipeline(
             client=client,
@@ -91,13 +65,13 @@ async def etl():
             flush_every=2000
         )
         total = await pipeline.run(
-            start_url=met_obs_url,
-            base_params=met_obs_parameters
+            start_url=spac_url,
+            base_params=spac_parameters
         )
         print(f"ETL proces completed: {total} rows processed")
 
 
-async def analysis_service(station_id: str) -> None:
+async def analysis_service(station_id: str, start_date: str, end_date: str) -> None:
     """Run data analysis examples for a specific weather station.
 
     Demonstrates various data analysis capabilities including:
@@ -122,8 +96,8 @@ async def analysis_service(station_id: str) -> None:
         # Example 1: Data access only
         df_obs = await repo.get_observations_multi_station(
             station_ids=[station_id],
-            since=parse_dt("2018-01-01T00:00:00Z"),
-            until=parse_dt("2018-03-31T00:00:00Z")
+            since=parse_dt(start_date),
+            until=parse_dt(end_date)
         )
         print("Raw observations:", df_obs.info())
 
@@ -131,8 +105,8 @@ async def analysis_service(station_id: str) -> None:
         daily = await svc.daily_stats_for_station(
             station_id=station_id,
             parameter_id="temp_dry",
-            since=parse_dt("2018-01-01T00:00:00Z"),
-            until=parse_dt("2018-03-31T00:00:00Z"),
+            since=parse_dt(start_date),
+            until=parse_dt(end_date),
             agg="mean",
         )
         print(daily.head())
@@ -141,8 +115,8 @@ async def analysis_service(station_id: str) -> None:
         anomalies = await svc.anomalies_zscore_for_station(
             station_id=station_id,
             parameter_id="temp_dry",
-            since=parse_dt("2018-01-01T00:00:00Z"),
-            until=parse_dt("2018-03-31T00:00:00Z"),
+            since=parse_dt(start_date),
+            until=parse_dt(end_date),
             z_threshold=3.0,
             rolling="14D",
         )
@@ -152,8 +126,8 @@ async def analysis_service(station_id: str) -> None:
         completeness = await svc.completeness_report(
             station_id=station_id,
             parameter_id="temp_dry",
-            since=parse_dt("2018-01-01T00:00:00Z"),
-            until=parse_dt("2018-03-31T00:00:00Z"),
+            since=parse_dt(start_date),
+            until=parse_dt(end_date),
             frequency="1h",
         )
         print(completeness)
@@ -188,11 +162,11 @@ async def main() -> None:
     Demonstrates concurrent processing of multiple weather stations
     with controlled concurrency to avoid resource exhaustion.
     """
-    station_ids = ["06072", "06073", "06074"]
+    met_obs_period, start_date, end_date = month_range_to_datetime("2025-01", "2025-01")
+    station_ids = ["06072", "06126", "06186", "ballerup-BME280"]
     #await etl()
-    #result = await analysis_service()
-    #results = await asyncio.gather(*(analysis_service(s) for s in station_ids))
-    results = await asyncio.gather(*(guarded(analysis_service, s) for s in station_ids))
+    # results = await asyncio.gather(*(analysis_service(s) for s in station_ids))
+    results = await asyncio.gather(*(guarded(analysis_service, s, start_date, end_date) for s in station_ids))
     print("Parallel finished:")
 
 if __name__ == "__main__":

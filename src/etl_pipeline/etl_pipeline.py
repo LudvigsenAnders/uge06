@@ -15,7 +15,6 @@ from .mapper import (station_from_feature_to_orm,
                      observations_from_DS18B20_to_ORM
                      )
 from db.connection import get_session
-#from db.db_utils import QueryRunner
 from etl_pipeline.postgresql_repository import save_stations, save_observations
 
 
@@ -192,7 +191,16 @@ class ETLPipeline:
             return 0
 
         self._extend_buffers(st, obs, n)
+
+        # Ensure first page data is flushed before starting pagination
+        if self._station_buf or self._obs_buf:
+            await self._flush()
+
         next_url = data_request.extract_next_link(page)
+
+        # Save checkpoint for first page if there's a next page
+        if self.checkpoint and next_url:
+            await self.checkpoint.save_checkpoint(next_url)
 
         self.logger.info("Next URL extracted from first page: %s", next_url)
 
@@ -260,13 +268,10 @@ class ETLPipeline:
         return page
 
     async def _fetch_transform_and_maybe_flush(self, next_url: str) -> Optional[str]:
-        """Fetch a page from a URL, 
-        transform data: takes the dict(page) do transformations before loading into Postgresql database
-        and flush buffers into database if needed.
+        """Fetch a page from a URL, transform data, and manage buffer flushing.
 
-        TODO: Remove the start of new session factory from URLCheckpointStore and refactor
-        etl_pipeline._fetch_transform_and_maybe_flush so that, await self.checkpoint.save_checkpoint(nxt)
-        is inside etl_pipeline._flush instead.
+        This method ensures that checkpoints are saved only after all data
+        from the current page has been successfully flushed to the database.
 
         Args:
             next_url: The URL of the next page to process.
@@ -281,12 +286,20 @@ class ETLPipeline:
         st, obs, n = transform_page(page)
         self._extend_buffers(st, obs, n)
 
+        # Flush if buffers exceed the threshold (memory management)
         if self._should_flush():
             await self._flush()
-            if self.checkpoint:
-                nxt = data_request.extract_next_link(page)
-                if nxt:
-                    await self.checkpoint.save_checkpoint(nxt)
+
+        # Ensure all buffered data is flushed before saving checkpoint
+        # This prevents data loss if we crash after saving checkpoint but before flushing
+        if self._station_buf or self._obs_buf:
+            await self._flush()
+
+        # Save checkpoint only after ensuring no buffered data remains
+        if self.checkpoint:
+            nxt = data_request.extract_next_link(page)
+            if nxt:
+                await self.checkpoint.save_checkpoint(nxt)
 
         return data_request.extract_next_link(page)
 
@@ -317,7 +330,7 @@ class ETLPipeline:
         """Flush buffered data to the database.
 
         Saves all buffered stations and observations to the database
-        and clears the buffers.
+        and clears the buffers. Also saves checkpoint if available.
         """
         if not self._station_buf and not self._obs_buf:
             return
@@ -340,6 +353,7 @@ class ETLPipeline:
         await self._flush()
         if self.checkpoint:
             await self.checkpoint.clear_checkpoint()
+
 
     async def _should_continue(self, page: dict, n_features: int) -> bool:
         """Determine if ingestion should continue based on page content.
