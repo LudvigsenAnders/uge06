@@ -42,13 +42,13 @@ async def etl():
     station_url = "https://opendataapi.dmi.dk/v2/metObs/collections/station/items"
     station_parameters = {}
 
-    met_obs_period, start_date, end_date = month_range_to_datetime("2025-01", "2025-01")
-    print(met_obs_period)
+    met_obs_period, start_date, end_date = month_range_to_datetime("2020-07", "2020-12")
+
     met_obs_url = "https://opendataapi.dmi.dk/v2/metObs/collections/observation/items"
     met_obs_parameters = {
         "datetime": met_obs_period,  # "2025-01-01T00:00:00Z/2025-01-31T00:00:00Z"
         "stationId": "06072",  # Ødum: "06072", Årslev: "06126", Landbohøjskolen: "06186"
-        #"parameterId": "temp_dry",
+        "parameterId": "temp_dry",
         "limit": 5000,
         "sortorder": "observed,DESC"
     }
@@ -65,8 +65,8 @@ async def etl():
             flush_every=2000
         )
         total = await pipeline.run(
-            start_url=spac_url,
-            base_params=spac_parameters
+            start_url=met_obs_url,
+            base_params=met_obs_parameters
         )
         print(f"ETL proces completed: {total} rows processed")
 
@@ -96,6 +96,7 @@ async def analysis_service(station_id: str, start_date: str, end_date: str) -> N
         # Example 1: Data access only
         df_obs = await repo.get_observations_multi_station(
             station_ids=[station_id],
+            parameter_id="temp_dry",
             since=parse_dt(start_date),
             until=parse_dt(end_date)
         )
@@ -120,7 +121,7 @@ async def analysis_service(station_id: str, start_date: str, end_date: str) -> N
             z_threshold=3.0,
             rolling="14D",
         )
-        print(anomalies.head())
+        #print(anomalies.head())
 
         # Example 4: Completeness
         completeness = await svc.completeness_report(
@@ -130,7 +131,7 @@ async def analysis_service(station_id: str, start_date: str, end_date: str) -> N
             until=parse_dt(end_date),
             frequency="1h",
         )
-        print(completeness)
+        #print(completeness)
 
         svc.plotter(df_obs)
 
@@ -162,9 +163,12 @@ async def main() -> None:
     Demonstrates concurrent processing of multiple weather stations
     with controlled concurrency to avoid resource exhaustion.
     """
-    met_obs_period, start_date, end_date = month_range_to_datetime("2025-01", "2025-01")
-    station_ids = ["06072", "06126", "06186", "ballerup-BME280"]
-    #await etl()
+    met_obs_period, start_date, end_date = month_range_to_datetime("2020-01", "2020-12")
+    
+    print(start_date, end_date)
+    
+    station_ids = ["06072", "06126", "06186"]
+    await etl()
     # results = await asyncio.gather(*(analysis_service(s) for s in station_ids))
     results = await asyncio.gather(*(guarded(analysis_service, s, start_date, end_date) for s in station_ids))
     print("Parallel finished:")

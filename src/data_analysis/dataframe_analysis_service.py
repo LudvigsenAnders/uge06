@@ -202,8 +202,6 @@ class ObservationAnalysisService:
             df: DataFrame with 'observed' and 'value' columns to plot.
         """
 
-        df = df[["parameter_id"]='temp_dry']
-
         # Using graph_objects
         fig = go.Figure([go.Scatter(x=df["observed"], y=df["value"])])
         fig.show()
